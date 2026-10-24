@@ -1,0 +1,11 @@
+[theme]
+base = "dark"
+primaryColor = "#D4A24C"          # طلایی برای دکمه‌ها و تاکیدها
+backgroundColor = "#1A1A1A"       # مشکی نرم برای پس‌زمینه
+secondaryBackgroundColor = "#2F4F3A" # سبز تیره برای سایدبار و کارت‌ها
+textColor = "#F5F0E8"             # کرم روشن برای متن
+font = "sans serif"
+
+[theme.sidebar]
+backgroundColor = "#2F4F3A"
+textColor = "#F5F0E8"
