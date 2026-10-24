@@ -1,15 +1,12 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
+from supabase import create_client, Client
 import plotly.express as px
-import plotly.graph_objects as go
-import os
 
 # --- ۱. تنظیمات اولیه و تم ---
 st.set_page_config(page_title="Varia Studio | Founder OS", layout="wide", page_icon="🌱")
 
-# پالت رنگی Varia Studio
 FOREST = "#2F4F3A"
 CREAM = "#F5F0E8"
 GOLD = "#D4A24C"
@@ -17,15 +14,10 @@ INK = "#1A1A1A"
 
 st.markdown(f"""
 <style>
-    /* فونت و رنگ‌ها */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
     .stApp {{ background-color: {INK}; }}
-    
-    /* هدرها */
     h1, h2, h3 {{ color: {CREAM} !important; font-weight: 600; }}
-    
-    /* کارت‌های متریک */
     div[data-testid="stMetric"] {{
         background-color: {FOREST};
         padding: 20px;
@@ -35,12 +27,8 @@ st.markdown(f"""
     }}
     div[data-testid="stMetricValue"] {{ color: {GOLD} !important; font-size: 2rem !important; }}
     div[data-testid="stMetricLabel"] {{ color: {CREAM} !important; }}
-    
-    /* تب‌ها */
     .stTabs [data-baseweb="tab"] {{ color: {CREAM}; font-weight: 600; }}
     .stTabs [aria-selected="true"] {{ color: {GOLD} !important; border-bottom-color: {GOLD} !important; }}
-    
-    /* دکمه‌ها */
     .stButton>button, .stFormSubmitButton>button {{
         background-color: {GOLD} !important;
         color: {INK} !important;
@@ -56,39 +44,14 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# --- ۲. دیتابیس ---
-DB_FILE = "varia_os.db"
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+# --- ۲. اتصال به Supabase ---
+@st.cache_resource
+def get_supabase() -> Client:
+    url = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
+    key = st.secrets["connections"]["supabase"]["SUPABASE_PUBLISHABLE_KEY"]
+    return create_client(url, key)
 
-def get_db():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    with get_db() as conn:
-        c = conn.cursor()
-        # مشتریان (CRM)
-        c.execute('''CREATE TABLE IF NOT EXISTS leads 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, person TEXT, 
-                      email TEXT, status TEXT, notes TEXT, date TEXT)''')
-        # تسک‌ها
-        c.execute('''CREATE TABLE IF NOT EXISTS tasks 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT, category TEXT, 
-                      priority TEXT, status TEXT, date TEXT)''')
-        # درآمد
-        c.execute('''CREATE TABLE IF NOT EXISTS revenue 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, amount REAL, source TEXT, date TEXT)''')
-        # پیش‌نویس‌های محتوا (Content Pipeline)
-        c.execute('''CREATE TABLE IF NOT EXISTS content_drafts 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, draft_text TEXT, 
-                      status TEXT, date TEXT)''')
-        conn.commit()
-
-init_db()
-
+supabase = get_supabase()
 today = datetime.now().strftime("%Y-%m-%d")
 
 # --- ۳. هدر و شاخص‌های کلیدی (KPIs) ---
@@ -101,11 +64,20 @@ with col_title:
 
 st.divider()
 
-with get_db() as conn:
-    total_revenue = conn.execute("SELECT SUM(amount) FROM revenue").fetchone()[0] or 0
-    pilots_sold = conn.execute("SELECT COUNT(*) FROM leads WHERE status = 'Pilot Paid'").fetchone()[0]
-    tasks_today = conn.execute("SELECT COUNT(*) FROM tasks WHERE date = ?", (today,)).fetchone()[0]
-    total_leads = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
+# گرفتن آمار از Supabase
+try:
+    rev_data = supabase.table("revenue").select("amount").execute().data
+    total_revenue = sum(item['amount'] for item in rev_data) if rev_data else 0
+    
+    leads_data = supabase.table("leads").select("status").execute().data
+    pilots_sold = len([l for l in leads_data if l['status'] == 'Pilot Paid']) if leads_data else 0
+    total_leads = len(leads_data) if leads_data else 0
+    
+    tasks_data = supabase.table("tasks").select("id").eq("date", today).execute().data
+    tasks_today = len(tasks_data) if tasks_data else 0
+except Exception as e:
+    st.error(f"Database connection error: {e}")
+    total_revenue, pilots_sold, total_leads, tasks_today = 0, 0, 0, 0
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("💰 Revenue", f"${total_revenue:,.0f} / $1k", delta=f"{int((total_revenue/1000)*100)}% Complete" if total_revenue < 1000 else "Goal Reached!")
@@ -115,7 +87,7 @@ c4.metric("🏢 Leads Pipeline", total_leads)
 
 st.divider()
 
-# --- ۴. تب‌های اصلی (Founder OS) ---
+# --- ۴. تب‌های اصلی ---
 tab1, tab2, tab3, tab4 = st.tabs(["🎯 Sales & CRM", "📅 Daily Execution", "📸 Content Studio", "📈 Analytics"])
 
 # ==========================================
@@ -124,7 +96,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["🎯 Sales & CRM", "📅 Daily Execution", "�
 with tab1:
     st.subheader("Lead Pipeline (B2B)")
     
-    with st.expander("➕ Add / Update a Lead", expanded=False):
+    with st.expander("➕ Add New Lead", expanded=False):
         with st.form("crm_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -138,27 +110,33 @@ with tab1:
             
             if st.form_submit_button("Save Lead"):
                 if company:
-                    with get_db() as conn:
-                        conn.execute("INSERT INTO leads (company, person, email, status, notes, date) VALUES (?, ?, ?, ?, ?, ?)",
-                                     (company, person, email, status, notes, today))
-                        conn.commit()
-                    st.success("Lead saved to pipeline!")
-                    st.rerun()
+                    try:
+                        supabase.table("leads").insert({
+                            "company": company, "person": person, "email": email, 
+                            "status": status, "notes": notes, "date": today
+                        }).execute()
+                        st.success("Lead saved to pipeline!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving lead: {e}")
 
-    with get_db() as conn:
-        leads_df = pd.read_sql_query("SELECT * FROM leads ORDER BY id DESC", conn)
-    
-    if not leads_df.empty:
-        # رنگی کردن وضعیت‌ها
-        def color_status(val):
-            if val == "Pilot Paid": return 'background-color: #2F4F3A; color: #D4A24C'
-            if val == "Lost / Rejected": return 'background-color: #8B0000; color: white'
-            return ''
+    try:
+        leads_res = supabase.table("leads").select("*").order("id", desc=True).execute()
+        leads_df = pd.DataFrame(leads_res.data)
         
-        st.dataframe(leads_df[['company', 'person', 'email', 'status', 'notes', 'date']].style.applymap(color_status, subset=['status']), 
-                     use_container_width=True, hide_index=True)
-    else:
-        st.info("Pipeline is empty. Start hunting!")
+        if not leads_df.empty:
+            def color_status(val):
+                if val == "Pilot Paid": return 'background-color: #2F4F3A; color: #D4A24C'
+                if val == "Lost / Rejected": return 'background-color: #8B0000; color: white'
+                return ''
+            
+            # نکته مهم: در پانداس جدید به جای applymap از map استفاده می‌شود
+            st.dataframe(leads_df[['company', 'person', 'email', 'status', 'notes', 'date']].style.map(color_status, subset=['status']), 
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info("Pipeline is empty. Start hunting!")
+    except Exception as e:
+        st.error(f"Error loading leads: {e}")
 
 # ==========================================
 # تب ۲: اجرای روزانه (تسک‌ها)
@@ -177,37 +155,44 @@ with tab2:
             
         if st.form_submit_button("Add Task"):
             if task_desc:
-                with get_db() as conn:
-                    conn.execute("INSERT INTO tasks (task, category, priority, status, date) VALUES (?, ?, ?, ?, ?)",
-                                 (task_desc, task_cat, priority, "Pending", today))
-                    conn.commit()
-                st.rerun()
+                try:
+                    supabase.table("tasks").insert({
+                        "task": task_desc, "category": task_cat, 
+                        "priority": priority, "status": "Pending", "date": today
+                    }).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving task: {e}")
 
-    with get_db() as conn:
-        tasks_df = pd.read_sql_query("SELECT * FROM tasks WHERE date = ? ORDER BY priority ASC, id DESC", conn, params=(today,))
-    
-    if tasks_df.empty:
-        st.info("No tasks for today. What's the plan?")
-    else:
-        for _, row in tasks_df.iterrows():
-            col1, col2, col3, col4 = st.columns([1, 5, 2, 1])
-            with col1:
-                is_done = row['status'] == 'Done'
-                if st.checkbox("", value=is_done, key=f"task_{row['id']}"):
-                    if not is_done:
-                        with get_db() as conn:
-                            conn.execute("UPDATE tasks SET status = 'Done' WHERE id = ?", (row['id'],))
-                            conn.commit()
-                        st.rerun()
-            with col2:
-                st.write(f"**{row['priority']}** | {row['task']}")
-            with col3:
-                st.caption(f"{row['category']}")
-            with col4:
-                if row['status'] == 'Done':
-                    st.success("✅")
-                else:
-                    st.warning("⏳")
+    try:
+        tasks_res = supabase.table("tasks").select("*").eq("date", today).order("id", desc=True).execute()
+        tasks_df = pd.DataFrame(tasks_res.data)
+        
+        if tasks_df.empty:
+            st.info("No tasks for today. What's the plan?")
+        else:
+            for index, row in tasks_df.iterrows():
+                col1, col2, col3, col4 = st.columns([1, 5, 2, 1])
+                with col1:
+                    is_done = row['status'] == 'Done'
+                    if st.checkbox("", value=is_done, key=f"task_{row['id']}"):
+                        if not is_done:
+                            try:
+                                supabase.table("tasks").update({"status": "Done"}).eq("id", row['id']).execute()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error updating task: {e}")
+                with col2:
+                    st.write(f"**{row['priority']}** | {row['task']}")
+                with col3:
+                    st.caption(f"{row['category']}")
+                with col4:
+                    if row['status'] == 'Done':
+                        st.success("✅")
+                    else:
+                        st.warning("⏳")
+    except Exception as e:
+        st.error(f"Error loading tasks: {e}")
 
 # ==========================================
 # تب ۳: استودیوی محتوا (Content Studio)
@@ -222,25 +207,32 @@ with tab3:
         
         if st.form_submit_button("Save Draft"):
             if draft_text:
-                with get_db() as conn:
-                    conn.execute("INSERT INTO content_drafts (platform, draft_text, status, date) VALUES (?, ?, ?, ?)",
-                                 (platform, draft_text, "Draft", today))
-                    conn.commit()
-                st.success("Draft saved!")
-                st.rerun()
-                
-    with get_db() as conn:
-        drafts_df = pd.read_sql_query("SELECT * FROM content_drafts ORDER BY id DESC", conn)
-        
-    if not drafts_df.empty:
-        for _, row in drafts_df.iterrows():
-            with st.expander(f"{row['platform']} - {row['date']}"):
-                st.write(row['draft_text'])
-                if st.button("Mark as Published", key=f"pub_{row['id']}"):
-                    with get_db() as conn:
-                        conn.execute("UPDATE content_drafts SET status = 'Published' WHERE id = ?", (row['id'],))
-                        conn.commit()
+                try:
+                    supabase.table("content_drafts").insert({
+                        "platform": platform, "draft_text": draft_text, 
+                        "status": "Draft", "date": today
+                    }).execute()
+                    st.success("Draft saved!")
                     st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving draft: {e}")
+                
+    try:
+        drafts_res = supabase.table("content_drafts").select("*").order("id", desc=True).execute()
+        drafts_df = pd.DataFrame(drafts_res.data)
+        
+        if not drafts_df.empty:
+            for index, row in drafts_df.iterrows():
+                with st.expander(f"{row['platform']} - {row['date']}"):
+                    st.write(row['draft_text'])
+                    if st.button("Mark as Published", key=f"pub_{row['id']}"):
+                        try:
+                            supabase.table("content_drafts").update({"status": "Published"}).eq("id", row['id']).execute()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error updating draft: {e}")
+    except Exception as e:
+        st.error(f"Error loading drafts: {e}")
 
 # ==========================================
 # تب ۴: آنالیتیکس و درآمد
@@ -257,25 +249,29 @@ with tab4:
             
         if st.form_submit_button("Log Payment"):
             if source:
-                with get_db() as conn:
-                    conn.execute("INSERT INTO revenue (amount, source, date) VALUES (?, ?, ?)",
-                                 (amount, source, today))
-                    conn.commit()
-                st.rerun()
+                try:
+                    supabase.table("revenue").insert({
+                        "amount": amount, "source": source, "date": today
+                    }).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving payment: {e}")
                 
-    with get_db() as conn:
-        rev_df = pd.read_sql_query("SELECT * FROM revenue ORDER BY date ASC", conn)
+    try:
+        rev_res = supabase.table("revenue").select("*").order("date", asc=True).execute()
+        rev_df = pd.DataFrame(rev_res.data)
         
-    if not rev_df.empty:
-        st.dataframe(rev_df, use_container_width=True, hide_index=True)
-        
-        # نمودار پیشرفت درآمد
-        rev_df['cum_sum'] = rev_df['amount'].cumsum()
-        fig = px.line(rev_df, x='date', y='cum_sum', markers=True, 
-                      title="Cumulative Revenue Progress",
-                      labels={'cum_sum': 'Total Revenue ($)', 'date': 'Date'})
-        fig.update_traces(line_color=GOLD, marker_color=CREAM)
-        fig.update_layout(plot_bgcolor=INK, paper_bgcolor=INK, font_color=CREAM, title_font_color=CREAM)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No revenue logged yet. The first $200 is the hardest.")
+        if not rev_df.empty:
+            st.dataframe(rev_df, use_container_width=True, hide_index=True)
+            
+            rev_df['cum_sum'] = rev_df['amount'].cumsum()
+            fig = px.line(rev_df, x='date', y='cum_sum', markers=True, 
+                          title="Cumulative Revenue Progress",
+                          labels={'cum_sum': 'Total Revenue ($)', 'date': 'Date'})
+            fig.update_traces(line_color=GOLD, marker_color=CREAM)
+            fig.update_layout(plot_bgcolor=INK, paper_bgcolor=INK, font_color=CREAM, title_font_color=CREAM)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No revenue logged yet. The first $200 is the hardest.")
+    except Exception as e:
+        st.error(f"Error loading revenue: {e}")
