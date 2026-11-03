@@ -30,7 +30,8 @@ DRAIN_WINDOW_SECONDS = max(60, int(os.getenv("DRAIN_WINDOW_SECONDS", "600")))
 
 def enqueue_scheduled_run(db) -> str:
     now = datetime.now(timezone.utc)
-    slot = now.strftime("%Y%m%dT%H00Z")
+    slot_hour = (now.hour // 8) * 8
+    slot = now.replace(hour=slot_hour, minute=0, second=0, microsecond=0).strftime("%Y%m%dT%H00Z")
     idempotency_key = f"scheduled-vision-{USER_ID}-{slot}"
     payload = {
         "product": PRODUCT,
