@@ -107,6 +107,28 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "natasha-api"}
 
 
+@app.post("/api/auth/login")
+def login(payload: LoginRequest) -> dict:
+    if not settings.supabase_publishable_key:
+        raise HTTPException(status_code=503, detail="Supabase publishable key is not configured")
+    try:
+        auth_client = create_client(settings.supabase_url, settings.supabase_publishable_key)
+        session = auth_client.auth.sign_in_with_password({
+            "email": payload.email,
+            "password": payload.password,
+        })
+        if not session.session:
+            raise ValueError("No session returned")
+        return {
+            "access_token": session.session.access_token,
+            "token_type": "bearer",
+            "expires_in": session.session.expires_in,
+            "user": {"id": session.user.id, "email": session.user.email},
+        }
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+
 @app.get("/api/leads")
 def list_leads(
     user_id: Annotated[str, Depends(current_user_id)],
@@ -183,6 +205,11 @@ def update_lead(
             "metadata": {"from": existing.data["stage"], "to": changes["stage"]},
         }).execute()
     return response.data[0]
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
 
 
 class CompanyCreate(BaseModel):
