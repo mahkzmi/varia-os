@@ -178,3 +178,182 @@ def update_lead(
             "metadata": {"from": existing.data["stage"], "to": changes["stage"]},
         }).execute()
     return response.data[0]
+
+
+class CompanyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    website: str | None = None
+    industry: str | None = None
+    country: str | None = None
+    notes: str | None = None
+    source: str | None = None
+
+
+class ContactCreate(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+    company_id: UUID | None = None
+    role: str | None = None
+    email: str | None = None
+    linkedin_url: str | None = None
+    is_decision_maker: bool = False
+    notes: str | None = None
+
+
+class FollowUpCreate(BaseModel):
+    lead_id: UUID
+    title: str = Field(min_length=1, max_length=240)
+    due_at: datetime
+
+
+class DraftCreate(BaseModel):
+    lead_id: UUID | None = None
+    recipient: str
+    subject: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1)
+
+
+def require_owned_record(db: Client, table: str, record_id: UUID, user_id: str) -> dict:
+    result = (
+        db.table(table).select("*")
+        .eq("id", str(record_id)).eq("user_id", user_id)
+        .maybe_single().execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail=f"{table.rstrip('s')} not found")
+    return result.data
+
+
+@app.get("/api/companies")
+def list_companies(
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> list[dict]:
+    result = db.table("natasha_companies").select("*").eq("user_id", user_id).order("name").execute()
+    return result.data or []
+
+
+@app.post("/api/companies", status_code=status.HTTP_201_CREATED)
+def create_company(
+    payload: CompanyCreate,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    row = {**payload.model_dump(), "user_id": user_id}
+    result = db.table("natasha_companies").insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Company could not be created")
+    company = result.data[0]
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "company", "entity_id": company["id"],
+        "action": "company_created", "details": {"name": company["name"]},
+    }).execute()
+    return company
+
+
+@app.get("/api/contacts")
+def list_contacts(
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> list[dict]:
+    result = db.table("natasha_contacts").select("*").eq("user_id", user_id).order("full_name").execute()
+    return result.data or []
+
+
+@app.post("/api/contacts", status_code=status.HTTP_201_CREATED)
+def create_contact(
+    payload: ContactCreate,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    if payload.company_id:
+        require_owned_record(db, "natasha_companies", payload.company_id, user_id)
+    row = {**payload.model_dump(mode="json"), "user_id": user_id}
+    result = db.table("natasha_contacts").insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Contact could not be created")
+    contact = result.data[0]
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "contact", "entity_id": contact["id"],
+        "action": "contact_created", "details": {"full_name": contact["full_name"]},
+    }).execute()
+    return contact
+
+
+@app.get("/api/follow-ups")
+def list_follow_ups(
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> list[dict]:
+    result = db.table("natasha_follow_ups").select("*").eq("user_id", user_id).order("due_at").execute()
+    return result.data or []
+
+
+@app.post("/api/follow-ups", status_code=status.HTTP_201_CREATED)
+def create_follow_up(
+    payload: FollowUpCreate,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    require_owned_record(db, "natasha_leads", payload.lead_id, user_id)
+    row = {**payload.model_dump(mode="json"), "user_id": user_id}
+    result = db.table("natasha_follow_ups").insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Follow-up could not be created")
+    item = result.data[0]
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "follow_up", "entity_id": item["id"],
+        "action": "follow_up_created", "details": {"lead_id": str(payload.lead_id)},
+    }).execute()
+    return item
+
+
+@app.get("/api/drafts")
+def list_drafts(
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> list[dict]:
+    result = db.table("natasha_message_drafts").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    return result.data or []
+
+
+@app.post("/api/drafts", status_code=status.HTTP_201_CREATED)
+def create_draft(
+    payload: DraftCreate,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    if payload.lead_id:
+        require_owned_record(db, "natasha_leads", payload.lead_id, user_id)
+    row = {**payload.model_dump(mode="json"), "user_id": user_id}
+    result = db.table("natasha_message_drafts").insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Draft could not be created")
+    draft = result.data[0]
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "message_draft", "entity_id": draft["id"],
+        "action": "draft_created", "details": {"recipient": draft["recipient"]},
+    }).execute()
+    return draft
+
+
+@app.post("/api/drafts/{draft_id}/approve")
+def approve_draft(
+    draft_id: UUID,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    draft = require_owned_record(db, "natasha_message_drafts", draft_id, user_id)
+    if draft["status"] != "draft":
+        raise HTTPException(status_code=409, detail="Only drafts can be approved")
+    result = (
+        db.table("natasha_message_drafts")
+        .update({"status": "approved", "approved_at": datetime.now().astimezone().isoformat()})
+        .eq("id", str(draft_id)).eq("user_id", user_id).execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Draft approval failed")
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "message_draft", "entity_id": str(draft_id),
+        "action": "draft_approved", "details": {"send_enabled": False},
+    }).execute()
+    return result.data[0]
