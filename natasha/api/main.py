@@ -59,7 +59,7 @@ def validate_owned_relations(
             .select("id")
             .eq("id", str(company_id))
             .eq("user_id", user_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
         if not company.data:
@@ -71,12 +71,12 @@ def validate_owned_relations(
             .select("id,company_id")
             .eq("id", str(primary_contact_id))
             .eq("user_id", user_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
         if not contact.data:
             raise HTTPException(status_code=422, detail="Contact not found for this user")
-        linked_company_id = contact.data.get("company_id")
+        linked_company_id = contact.data[0].get("company_id")
         if company_id and linked_company_id and linked_company_id != str(company_id):
             raise HTTPException(status_code=422, detail="Contact does not belong to the selected company")
 
@@ -192,11 +192,12 @@ def update_lead(
         .select("id,stage")
         .eq("id", str(lead_id))
         .eq("user_id", user_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     if not existing.data:
         raise HTTPException(status_code=404, detail="Lead not found")
+    existing_lead = existing.data[0]
     response = (
         db.table("natasha_leads")
         .update(changes)
@@ -206,13 +207,13 @@ def update_lead(
     )
     if not response.data:
         raise HTTPException(status_code=500, detail="Lead could not be updated")
-    if "stage" in changes and changes["stage"] != existing.data["stage"]:
+    if "stage" in changes and changes["stage"] != existing_lead["stage"]:
         db.table("natasha_activities").insert({
             "user_id": user_id,
             "lead_id": str(lead_id),
             "activity_type": "stage_change",
             "subject": "Lead stage changed",
-            "metadata": {"from": existing.data["stage"], "to": changes["stage"]},
+            "metadata": {"from": existing_lead["stage"], "to": changes["stage"]},
         }).execute()
     return response.data[0]
 
@@ -253,11 +254,11 @@ def require_owned_record(db: Client, table: str, record_id: UUID, user_id: str) 
     result = (
         db.table(table).select("*")
         .eq("id", str(record_id)).eq("user_id", user_id)
-        .maybe_single().execute()
+        .limit(1).execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail=f"{table.rstrip('s')} not found")
-    return result.data
+    return result.data[0]
 
 
 @app.get("/api/companies")
@@ -498,10 +499,10 @@ async def run_sales_agent(
         website = item.get("website")
         existing = (
             db.table("natasha_companies").select("id")
-            .eq("user_id", user_id).eq("name", name).maybe_single().execute()
+            .eq("user_id", user_id).eq("name", name).limit(1).execute()
         )
         if existing.data:
-            company_id = existing.data["id"]
+            company_id = existing.data[0]["id"]
         else:
             company_row = {
                 "user_id": user_id, "name": name, "website": website,
