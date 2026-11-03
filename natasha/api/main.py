@@ -457,27 +457,34 @@ async def run_sales_agent(
         if not search_results:
             return {"status": "no_results", "leads_created": 0, "leads": []}
 
+        llm_url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+        llm_headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+        llm_payload = {
+            "model": settings.llm_model,
+            "temperature": 0.1,
+            "messages": [
+                {"role": "system", "content": _sales_system_prompt()},
+                {"role": "user", "content": json.dumps({
+                    "product": payload.product,
+                    "target_market": payload.target_market,
+                    "ideal_customer": payload.ideal_customer,
+                    "search_results": [
+                        {"title": x.get("title"), "url": x.get("url"), "content": str(x.get("content", ""))[:2500]}
+                        for x in search_results
+                    ],
+                    "max_companies": payload.max_companies,
+                }, ensure_ascii=False)},
+            ],
+        }
         llm_response = await client.post(
-            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-            json={
-                "model": settings.llm_model,
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": _sales_system_prompt()},
-                    {"role": "user", "content": json.dumps({
-                        "product": payload.product,
-                        "target_market": payload.target_market,
-                        "ideal_customer": payload.ideal_customer,
-                        "search_results": search_results,
-                        "max_companies": payload.max_companies,
-                    }, ensure_ascii=False)},
-                ],
-            },
+            llm_url, headers=llm_headers,
+            json={**llm_payload, "response_format": {"type": "json_object"}},
         )
+        # Some OpenAI-compatible free models do not support response_format.
+        if llm_response.status_code in (400, 422):
+            llm_response = await client.post(llm_url, headers=llm_headers, json=llm_payload)
         if llm_response.status_code >= 400:
-            raise HTTPException(status_code=502, detail="LLM provider returned an error")
+            raise HTTPException(status_code=502, detail=f"LLM provider request failed (HTTP {llm_response.status_code})")
         try:
             result = json.loads(llm_response.json()["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError, ValueError):
