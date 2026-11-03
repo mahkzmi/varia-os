@@ -15,7 +15,7 @@ from .settings import settings
 app = FastAPI(title="Natasha API", version="0.1.0", docs_url="/docs")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://varia-os.onrender.com"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
