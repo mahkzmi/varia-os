@@ -45,8 +45,7 @@ function App() {
   const [showContact, setShowContact] = useState(false);
 
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [mission, setMission] = useState({ product: "Varia Vision", target_market: "Netherlands", ideal_customer: "Agricultural technology companies, crop consultants, and precision-agriculture providers that use drone or field imagery and may need crop/weed detection.", max_companies: 5 });
   const [missionBusy, setMissionBusy] = useState(false);
@@ -80,23 +79,30 @@ function App() {
 
   function logout() {
     sessionStorage.removeItem("varia_access_token"); sessionStorage.removeItem("varia_user_email");
-    setToken(""); setUserEmail(""); setOtpSent(false); setOtp(""); setData({leads:[],companies:[],contacts:[],drafts:[],followUps:[],jobs:[]});
+    setToken(""); setUserEmail(""); setPassword(""); setData({leads:[],companies:[],contacts:[],drafts:[],followUps:[],jobs:[]});
   }
-  async function sendOtp() {
-    if (!email.includes("@")) { setError("Enter a valid email address."); return; }
-    setAuthBusy(true); setError("");
-    try { await request("/api/auth/otp/request", undefined, {method:"POST",body:JSON.stringify({email})}); setOtpSent(true); notify("A sign-in code has been sent."); }
-    catch(e) { setError(e instanceof Error ? e.message : "Could not send code."); }
-    finally { setAuthBusy(false); }
-  }
-  async function verifyOtp() {
+  async function login() {
+    if (!email.includes("@") || password.length < 8) {
+      setError("Enter your email and password (at least 8 characters).");
+      return;
+    }
     setAuthBusy(true); setError("");
     try {
-      const result = await request("/api/auth/otp/verify", undefined, {method:"POST",body:JSON.stringify({email,token:otp})});
-      sessionStorage.setItem("varia_access_token",result.access_token); sessionStorage.setItem("varia_user_email",result.user?.email || email);
-      setUserEmail(result.user?.email || email); setToken(result.access_token); notify("Welcome to Varia OS.");
-    } catch(e) { setError(e instanceof Error ? e.message : "Invalid or expired code."); }
-    finally { setAuthBusy(false); }
+      const result = await request("/api/auth/login", undefined, {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      sessionStorage.setItem("varia_access_token", result.access_token);
+      sessionStorage.setItem("varia_user_email", result.user?.email || email);
+      setUserEmail(result.user?.email || email);
+      setToken(result.access_token);
+      setPassword("");
+      notify("Welcome to Varia OS.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign in.");
+    } finally {
+      setAuthBusy(false);
+    }
   }
   async function runMission() {
     setMissionBusy(true); setError("");
@@ -142,12 +148,15 @@ function App() {
     <div className="auth-panel">
       <div className="auth-form">
         <div className="mobile-brand"><Sprout/> VARIA OS</div>
-        <span className="eyebrow muted">YOUR WORKSPACE</span><h2>{otpSent ? "Check your inbox." : "Welcome back."}</h2>
-        <p>{otpSent ? `We sent a sign-in code to ${email}. Enter it below to continue.` : "Sign in to your studio workspace. No password required."}</p>
-        {!otpSent ? <><label>Email address</label><input type="email" placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendOtp()}/><button className="primary-btn full" onClick={sendOtp} disabled={authBusy}>{authBusy?"Sending code…":"Continue with email"} <ArrowUpRight size={17}/></button></> :
-          <><label>6-digit verification code</label><input className="otp-input" inputMode="numeric" autoFocus maxLength={8} placeholder="000000" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} onKeyDown={e=>e.key==="Enter"&&verifyOtp()}/><button className="primary-btn full" onClick={verifyOtp} disabled={authBusy || otp.length<6}>{authBusy?"Verifying…":"Verify and enter"} <ArrowUpRight size={17}/></button><button className="text-btn" onClick={()=>{setOtpSent(false);setOtp("");}}>Use a different email</button></>}
+        <span className="eyebrow muted">YOUR WORKSPACE</span><h2>Welcome back.</h2>
+        <p>Sign in to your private studio workspace.</p>
+        <label>Email address</label>
+        <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()}/>
+        <label>Password</label>
+        <input type="password" autoComplete="current-password" placeholder="Your password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()}/>
+        <button className="primary-btn full" onClick={login} disabled={authBusy}>{authBusy?"Signing in…":"Sign in"} <ArrowUpRight size={17}/></button>
         {error && <div className="error-box">{error}</div>}
-        <div className="auth-secure"><ShieldCheck size={15}/> Secure, passwordless access powered by Supabase Auth</div>
+        <div className="auth-secure"><ShieldCheck size={15}/> Private founder access · Supabase Auth</div>
       </div>
       <div className="auth-copyright">© 2026 Varia Studio. All systems thoughtfully built.</div>
     </div>
