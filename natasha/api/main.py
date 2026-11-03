@@ -20,8 +20,8 @@ def get_db() -> Client:
 
 
 def current_user_id(
+    db: Annotated[Client, Depends(get_db)],
     authorization: Annotated[str | None, Header()] = None,
-    db: Annotated[Client, Depends(get_db)] = None,
 ) -> str:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
