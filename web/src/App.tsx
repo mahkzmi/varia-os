@@ -215,7 +215,49 @@ function Natasha({mission,setMission,runMission,busy,jobs,drafts,leads,companies
 }
 function Pipeline({leads,companies,companyMap,search,setSearch,onAdd}:any){return <><PageHeading eyebrow="GROWTH · CRM" title="Pipeline." subtitle="Track every opportunity from first signal to signed pilot." action={<button className="primary-btn" onClick={onAdd}><Plus size={16}/> Add lead</button>}/><div className="toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leads, products, notes…"/></div><div className="toolbar-meta"><Filter size={15}/>{leads.length} records</div></div><div className="panel table-panel"><div className="table-wrap"><table><thead><tr><th>COMPANY / OPPORTUNITY</th><th>PRODUCT</th><th>STAGE</th><th>FIT SCORE</th><th>VALUE</th><th>NEXT ACTION</th><th>CREATED</th></tr></thead><tbody>{leads.map((x:AnyRow)=><tr key={x.id}><td><div className="table-primary">{companyMap[x.company_id]?.name || "Unlinked opportunity"}</div><div className="table-secondary">{x.source || "Manual entry"}</div></td><td>{x.product}</td><td><Stage stage={x.stage}/></td><td><FitScore score={x.fit_score}/></td><td>{x.estimated_value?money(x.estimated_value,x.currency):"—"}</td><td>{x.next_action || "—"}</td><td>{dateLabel(x.created_at)}</td></tr>)}</tbody></table>{!leads.length&&<Empty title="Your pipeline is clear." body="Add your first lead or let Natasha discover new opportunities."/>}</div></div></>}
 function Companies({companies,search,setSearch,onAdd}:any){const filtered=companies.filter((c:AnyRow)=>[c.name,c.industry,c.country].join(" ").toLowerCase().includes(search.toLowerCase()));return <><PageHeading eyebrow="GROWTH · ACCOUNTS" title="Companies." subtitle="A living map of the organizations Varia wants to work with." action={<button className="primary-btn" onClick={onAdd}><Plus size={16}/> Add company</button>}/><div className="toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search organizations…"/></div><div className="toolbar-meta">{filtered.length} companies</div></div><div className="company-grid">{filtered.map((c:AnyRow)=><div className="panel company-card" key={c.id}><div className="company-card-top"><div className="company-symbol">{initials(c.name)}</div><span className="company-country">{c.country||"—"}</span></div><h3>{c.name}</h3><p>{c.industry||"Industry not specified"}</p>{c.website&&<a href={c.website.startsWith("http")?c.website:`https://${c.website}`} target="_blank" rel="noreferrer">{c.website.replace(/^https?:\/\//,"")} <ArrowUpRight size={13}/></a>}<div className="company-foot"><span>ADDED {dateLabel(c.created_at)}</span><span>{c.source||"CRM"}</span></div></div>)}{!filtered.length&&<div className="panel empty-company"><Empty title="No companies found" body="Add an account or start a Natasha research mission."/></div>}</div></>}
-function Contacts({contacts,companies,search,setSearch,onAdd}:any){const map=Object.fromEntries(companies.map((c:AnyRow)=>[c.id,c.name]));const filtered=contacts.filter((c:AnyRow)=>[c.full_name,c.role,c.email,map[c.company_id]].join(" ").toLowerCase().includes(search.toLowerCase()));return <><PageHeading eyebrow="GROWTH · RELATIONSHIPS" title="People behind the companies." subtitle="Keep decision-makers, champions, and conversations connected." action={<button className="primary-btn" onClick={onAdd}><Plus size={16}/> Add contact</button>}/><div className="toolbar"><div className="searchbox"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search people…"/></div><div className="toolbar-meta">{filtered.length} contacts</div></div><div className="panel table-panel"><div className="table-wrap"><table><thead><tr><th>CONTACT</th><th>COMPANY</th><th>ROLE</th><th>EMAIL</th><th>LINKEDIN</th></tr></thead><tbody>{filtered.map((c:AnyRow)=><tr key={c.id}><td><div className="contact-cell"><div className="row-avatar">{initials(c.full_name)}</div><div className="table-primary">{c.full_name}</div></div></td><td>{map[c.company_id]||"—"}</td><td>{c.role||"—"}</td><td>{c.email||"—"}</td><td>{c.linkedin_url?<a href={c.linkedin_url} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={13}/></a>:"—"}</td></tr>)}</tbody></table>{!filtered.length&&<Empty title="No contacts yet" body="Add a person and connect them to a company."/></div></div></>}
+function Contacts({contacts,companies,search,setSearch,onAdd}:any) {
+  const companyNames = Object.fromEntries(companies.map((company:AnyRow) => [company.id, company.name]));
+  const filtered = contacts.filter((contact:AnyRow) =>
+    [contact.full_name, contact.role, contact.email, companyNames[contact.company_id]]
+      .join(" ").toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <>
+      <PageHeading
+        eyebrow="GROWTH · RELATIONSHIPS"
+        title="People behind the companies."
+        subtitle="Keep decision-makers, champions, and conversations connected."
+        action={<button className="primary-btn" onClick={onAdd}><Plus size={16}/> Add contact</button>}
+      />
+      <div className="toolbar">
+        <div className="searchbox">
+          <Search size={16}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search people…"/>
+        </div>
+        <div className="toolbar-meta">{filtered.length} contacts</div>
+      </div>
+      <div className="panel table-panel">
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>CONTACT</th><th>COMPANY</th><th>ROLE</th><th>EMAIL</th><th>LINKEDIN</th></tr></thead>
+            <tbody>
+              {filtered.map((contact:AnyRow) => (
+                <tr key={contact.id}>
+                  <td><div className="contact-cell"><div className="row-avatar">{initials(contact.full_name)}</div><div className="table-primary">{contact.full_name}</div></div></td>
+                  <td>{companyNames[contact.company_id] || "—"}</td>
+                  <td>{contact.role || "—"}</td>
+                  <td>{contact.email || "—"}</td>
+                  <td>{contact.linkedin_url ? <a href={contact.linkedin_url} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={13}/></a> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!filtered.length && <Empty title="No contacts yet" body="Add a person and connect them to a company."/>}
+        </div>
+      </div>
+    </>
+  );
+}
 function Drafts({drafts,approveDraft}:any){return <><PageHeading eyebrow="GROWTH · COMMUNICATION" title="Words worth sending." subtitle="Founder-led outreach, prepared by Natasha and reviewed by you."/><div className="draft-list">{drafts.map((d:AnyRow)=><article className="panel draft-card" key={d.id}><div className="draft-card-head"><div className="draft-type"><Mail size={16}/> OUTREACH DRAFT</div><span className={`status-badge ${d.status}`}>{d.status}</span></div><h3>{d.subject}</h3><div className="draft-to">TO <strong>{d.recipient}</strong></div><div className="draft-body">{d.body}</div><div className="draft-card-foot"><span>Created {dateLabel(d.created_at)}</span>{d.status==="draft"?<button className="secondary-btn" onClick={()=>approveDraft(d.id)}><Check size={15}/> Approve draft</button>:<span className="approved-note"><ShieldCheck size={14}/> Approved · not sent</span>}</div></article>)}{!drafts.length&&<div className="panel"><Empty title="No drafts waiting." body="Run a Natasha mission and review the outreach she prepares."/></div>}</div></>}
 function ActivityView({jobs,followUps}:any){return <><PageHeading eyebrow="SYSTEM · OPERATIONS" title="Activity & follow-ups." subtitle="A clear record of background work and the next commitments."/><div className="section-grid"><section className="panel"><div className="panel-head"><div><h3>Research jobs</h3><p>Natasha mission execution</p></div></div>{jobs.map((j:AnyRow)=><div className="list-row" key={j.id}><div className="job-icon"><Zap size={16}/></div><div className="row-main"><strong>{j.payload?.product||"Agent run"} · {j.payload?.target_market||"Market"}</strong><small>{dateLabel(j.created_at)}</small></div><span className={`status-text ${j.status}`}>{j.status}</span></div>)}{!jobs.length&&<Empty title="No job activity" body="Queued missions will appear here."/>}</section><section className="panel"><div className="panel-head"><div><h3>Follow-ups</h3><p>Keep momentum with timely next steps</p></div></div>{followUps.map((f:AnyRow)=><div className="list-row" key={f.id}><div className="attention-icon"><CalendarClock size={16}/></div><div className="row-main"><strong>{f.title}</strong><small>Due {dateLabel(f.due_at)}</small></div></div>)}{!followUps.length&&<Empty title="No follow-ups scheduled" body="Create follow-ups as your pipeline grows."/ >}</section></div></>}
 function Stage({stage}:any){const s=String(stage||"new").toLowerCase();return <span className={`stage stage-${s}`}>{s.replace("_"," ")}</span>}
