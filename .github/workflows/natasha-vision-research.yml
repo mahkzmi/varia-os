@@ -1,0 +1,42 @@
+name: Natasha Vision Research
+
+on:
+  schedule:
+    - cron: "7 0,8,16 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: natasha-vision-scheduled-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Natasha engine
+        uses: actions/checkout@v4
+        with:
+          ref: feat/natasha-sales-engine
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: natasha/api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r natasha/api/requirements.txt
+
+      - name: Run scheduled Natasha mission
+        env:
+          SUPABASE_URL: https://gjnsyufdrgohthuxnqzf.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NATASHA_USER_ID: 08c30dba-c45a-401c-8880-de1ee1a65995
+          NATASHA_API_URL: https://natasha-api.onrender.com
+          DRAIN_WINDOW_SECONDS: "600"
+        run: python -m natasha.scheduled_run
