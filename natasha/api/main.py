@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
@@ -642,3 +642,86 @@ async def run_sales_agent(
                     "leads_created": len(created)},
     }).execute()
     return {"status": "completed", "leads_created": len(created), "leads": created}
+
+
+# --- Durable background jobs -------------------------------------------------
+
+class AgentJobRequest(AgentRunRequest):
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=160)
+
+
+@app.post("/api/jobs/agent-run", status_code=status.HTTP_202_ACCEPTED)
+def enqueue_agent_run(
+    payload: AgentJobRequest,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    key = payload.idempotency_key or str(uuid4())
+    job_payload = payload.model_dump(exclude={"idempotency_key"})
+    try:
+        result = db.table("natasha_jobs").insert({
+            "user_id": user_id,
+            "job_type": "agent_run",
+            "payload": job_payload,
+            "idempotency_key": key,
+            "status": "queued",
+        }).execute()
+    except Exception:
+        # An idempotency collision returns the existing job, never creates a duplicate.
+        existing = (
+            db.table("natasha_jobs").select("*")
+            .eq("user_id", user_id).eq("idempotency_key", key).limit(1).execute()
+        )
+        if existing.data:
+            return {"status": "already_queued", "job": existing.data[0]}
+        raise HTTPException(status_code=500, detail="Could not enqueue Natasha job")
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Could not enqueue Natasha job")
+    return {"status": "queued", "job": result.data[0]}
+
+
+@app.get("/api/jobs")
+def list_jobs(
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> list[dict]:
+    result = (
+        db.table("natasha_jobs").select("*").eq("user_id", user_id)
+        .order("created_at", desc=True).limit(50).execute()
+    )
+    return result.data or []
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job(
+    job_id: UUID,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    result = (
+        db.table("natasha_jobs").select("*").eq("id", str(job_id))
+        .eq("user_id", user_id).limit(1).execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return result.data[0]
+
+
+class InternalAgentRunRequest(BaseModel):
+    user_id: UUID
+    payload: AgentRunRequest
+
+
+@app.post("/internal/agent/run")
+async def internal_agent_run(
+    request: InternalAgentRunRequest,
+    x_internal_key: Annotated[str | None, Header(alias="X-Internal-Key")] = None,
+) -> dict:
+    import hmac
+    expected = settings.supabase_service_role_key
+    if not expected or not x_internal_key or not hmac.compare_digest(x_internal_key, expected):
+        raise HTTPException(status_code=401, detail="Internal worker authentication failed")
+    if not settings.supabase_url:
+        raise HTTPException(status_code=503, detail="Supabase URL is not configured")
+    service_db = create_client(settings.supabase_url, expected)
+    return await run_sales_agent(request.payload, str(request.user_id), service_db)
