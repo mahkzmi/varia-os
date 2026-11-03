@@ -20,9 +20,9 @@ class LoginRequest(BaseModel):
 
 
 def get_db() -> Client:
-    if not settings.supabase_url or not settings.supabase_service_role_key:
-        raise HTTPException(status_code=503, detail="Supabase server configuration is missing")
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise HTTPException(status_code=503, detail="Supabase URL or publishable key is missing")
+    return create_client(settings.supabase_url, settings.supabase_publishable_key)
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -39,6 +39,9 @@ def current_user_id(
         user = db.auth.get_user(token)
         if not user or not user.user:
             raise ValueError("No authenticated user")
+        # Run all subsequent PostgREST queries with the caller's JWT so RLS
+        # evaluates auth.uid() as the authenticated owner, not service_role.
+        db.postgrest.auth(token)
         return str(user.user.id)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired access token")
@@ -391,3 +394,152 @@ def approve_draft(
         "action": "draft_approved", "details": {"send_enabled": False},
     }).execute()
     return result.data[0]
+
+
+# --- Natasha AI Sales Engine -------------------------------------------------
+
+class AgentRunRequest(BaseModel):
+    product: str = Field(pattern=r"^(Varia Carbon|Varia Vision|Varia Trait-Bridge)$")
+    target_market: str = Field(min_length=2, max_length=160)
+    ideal_customer: str = Field(min_length=10, max_length=1200)
+    max_companies: int = Field(default=5, ge=1, le=10)
+
+
+def _sales_system_prompt() -> str:
+    return """You are Natasha, the research-led sales intelligence agent for Varia Studio,
+an independent AgTech AI studio. Products:
+- Varia Carbon: soil organic carbon estimation/intelligence from environmental and satellite data.
+- Varia Vision: computer-vision crop/weed detection and field image analysis.
+- Varia Trait-Bridge: an early-stage plant-trait / phenotyping product; do not claim capabilities not supplied.
+Your job: qualify companies as potential buyers/partners. Use ONLY supplied search results as factual evidence.
+Never invent company facts, people, emails, revenue, customers, or product capabilities.
+Return strict JSON with key 'leads', an array. Each item: company_name, website, country,
+industry, fit_score (0-100 integer), fit_rationale, evidence (array of short strings),
+recommended_angle, next_action, contact_role, email_subject, email_body.
+If evidence is weak, lower score and explicitly say what is unknown. Draft concise, specific,
+professional outreach. Do not imply a relationship or claim that Varia has results it has not proven.
+Return no markdown fences."""
+
+
+@app.post("/api/agent/run")
+async def run_sales_agent(
+    payload: AgentRunRequest,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    if not settings.tavily_api_key:
+        raise HTTPException(status_code=503, detail="TAVILY_API_KEY is not configured")
+    if not settings.llm_api_key:
+        raise HTTPException(status_code=503, detail="LLM_API_KEY is not configured")
+
+    import json
+    import httpx
+
+    query = (
+        f"companies organizations {payload.target_market} {payload.ideal_customer} "
+        f"related to {payload.product} agriculture technology"
+    )
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        search_response = await client.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": settings.tavily_api_key,
+                "query": query,
+                "search_depth": "advanced",
+                "max_results": min(payload.max_companies * 3, 20),
+                "include_answer": False,
+            },
+        )
+        if search_response.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Web research provider returned an error")
+        search_data = search_response.json()
+        search_results = search_data.get("results", [])
+        if not search_results:
+            return {"status": "no_results", "leads_created": 0, "leads": []}
+
+        llm_response = await client.post(
+            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+            json={
+                "model": settings.llm_model,
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": _sales_system_prompt()},
+                    {"role": "user", "content": json.dumps({
+                        "product": payload.product,
+                        "target_market": payload.target_market,
+                        "ideal_customer": payload.ideal_customer,
+                        "search_results": search_results,
+                        "max_companies": payload.max_companies,
+                    }, ensure_ascii=False)},
+                ],
+            },
+        )
+        if llm_response.status_code >= 400:
+            raise HTTPException(status_code=502, detail="LLM provider returned an error")
+        try:
+            result = json.loads(llm_response.json()["choices"][0]["message"]["content"])
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise HTTPException(status_code=502, detail="LLM returned invalid structured output")
+
+    created = []
+    for item in result.get("leads", [])[:payload.max_companies]:
+        name = str(item.get("company_name", "")).strip()
+        if not name:
+            continue
+        website = item.get("website")
+        existing = (
+            db.table("natasha_companies").select("id")
+            .eq("user_id", user_id).eq("name", name).maybe_single().execute()
+        )
+        if existing.data:
+            company_id = existing.data["id"]
+        else:
+            company_row = {
+                "user_id": user_id, "name": name, "website": website,
+                "industry": item.get("industry"), "country": item.get("country"),
+                "source": "natasha_ai_research",
+                "notes": json.dumps({"evidence": item.get("evidence", [])}, ensure_ascii=False),
+            }
+            company_result = db.table("natasha_companies").insert(company_row).execute()
+            if not company_result.data:
+                continue
+            company_id = company_result.data[0]["id"]
+
+        lead_result = db.table("natasha_leads").insert({
+            "user_id": user_id, "company_id": company_id, "product": payload.product,
+            "stage": "qualified" if int(item.get("fit_score", 0)) >= 70 else "researching",
+            "source": "natasha_ai_research",
+            "fit_score": max(0, min(100, int(item.get("fit_score", 0)))),
+            "fit_rationale": str(item.get("fit_rationale", ""))[:4000],
+            "next_action": str(item.get("next_action", "Review research and identify a decision-maker"))[:1000],
+            "notes": json.dumps({
+                "evidence": item.get("evidence", []),
+                "recommended_angle": item.get("recommended_angle"),
+                "contact_role": item.get("contact_role"),
+            }, ensure_ascii=False),
+        }).execute()
+        if not lead_result.data:
+            continue
+        lead = lead_result.data[0]
+        draft = db.table("natasha_message_drafts").insert({
+            "user_id": user_id, "lead_id": lead["id"], "channel": "email",
+            "recipient": website or name,
+            "subject": str(item.get("email_subject", "Exploring a potential AgTech collaboration"))[:300],
+            "body": str(item.get("email_body", ""))[:12000],
+            "status": "draft",
+        }).execute()
+        created.append({
+            "company": name, "lead": lead,
+            "draft": draft.data[0] if draft.data else None,
+            "evidence": item.get("evidence", []),
+            "recommended_angle": item.get("recommended_angle"),
+        })
+
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "agent_run", "action": "sales_research_completed",
+        "details": {"product": payload.product, "target_market": payload.target_market,
+                    "leads_created": len(created)},
+    }).execute()
+    return {"status": "completed", "leads_created": len(created), "leads": created}
