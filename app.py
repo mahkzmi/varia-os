@@ -88,7 +88,7 @@ c4.metric("🏢 Leads Pipeline", total_leads)
 st.divider()
 
 # --- ۴. تب‌های اصلی ---
-tab1, tab2, tab3, tab4 = st.tabs(["🎯 Sales & CRM", "📅 Daily Execution", "📸 Content Studio", "📈 Analytics"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎯 Sales & CRM", "📅 Daily Execution", "📸 Content Studio", "📈 Analytics", "🤖 Natasha"])
 
 # ==========================================
 # تب ۱: فروش و مدیریت مشتریان (CRM)
@@ -275,3 +275,151 @@ with tab4:
             st.info("No revenue logged yet. The first $200 is the hardest.")
     except Exception as e:
         st.error(f"Error loading revenue: {e}")
+
+# ==========================================
+# تب ۵: Natasha AI Sales Assistant
+# ==========================================
+with tab5:
+    import httpx
+
+    st.subheader("Natasha | AI Sales Intelligence")
+    st.caption("Research prospects, build your pipeline, and prepare outreach drafts. Nothing is sent automatically.")
+
+    api_url = st.secrets.get("NATASHA_API_URL", "https://natasha-api.onrender.com").rstrip("/")
+    token = st.session_state.get("natasha_access_token")
+
+    if not token:
+        st.markdown("#### ورود بدون رمز عبور")
+        st.write("کد یک‌بارمصرف به ایمیلت ارسال می‌شود؛ رمز Supabase لازم نیست.")
+        email = st.text_input("Email", key="natasha_email")
+        if st.button("Send sign-in code", key="natasha_send_otp"):
+            if not email or "@" not in email:
+                st.error("یک آدرس ایمیل معتبر وارد کن.")
+            else:
+                try:
+                    response = httpx.post(
+                        f"{api_url}/api/auth/otp/request",
+                        json={"email": email},
+                        timeout=30.0,
+                    )
+                    if response.is_success:
+                        st.session_state["natasha_otp_sent"] = True
+                        st.success("کد ورود ارسال شد. ایمیلت را بررسی کن.")
+                    else:
+                        st.error(f"ارسال کد ناموفق بود: {response.text[:500]}")
+                except Exception as exc:
+                    st.error(f"اتصال به Natasha API ناموفق بود: {exc}")
+
+        if st.session_state.get("natasha_otp_sent"):
+            otp = st.text_input("6-digit email code", max_chars=8, key="natasha_otp")
+            if st.button("Verify and enter Natasha", key="natasha_verify_otp"):
+                try:
+                    response = httpx.post(
+                        f"{api_url}/api/auth/otp/verify",
+                        json={"email": st.session_state.get("natasha_email", ""), "token": otp},
+                        timeout=30.0,
+                    )
+                    if response.is_success:
+                        st.session_state["natasha_access_token"] = response.json()["access_token"]
+                        st.session_state.pop("natasha_otp_sent", None)
+                        st.rerun()
+                    else:
+                        st.error(f"کد معتبر نیست یا منقضی شده: {response.text[:300]}")
+                except Exception as exc:
+                    st.error(f"خطا در تأیید کد: {exc}")
+    else:
+        headers = {"Authorization": f"Bearer {token}"}
+
+        def natasha_get(path):
+            response = httpx.get(f"{api_url}{path}", headers=headers, timeout=30.0)
+            response.raise_for_status()
+            return response.json()
+
+        def natasha_post(path, payload):
+            response = httpx.post(f"{api_url}{path}", headers=headers, json=payload, timeout=240.0)
+            response.raise_for_status()
+            return response.json()
+
+        top_left, top_right = st.columns([5, 1])
+        with top_left:
+            st.success("Natasha connected")
+        with top_right:
+            if st.button("Sign out", key="natasha_signout"):
+                st.session_state.pop("natasha_access_token", None)
+                st.rerun()
+
+        try:
+            leads = natasha_get("/api/leads")
+            companies = natasha_get("/api/companies")
+            drafts = natasha_get("/api/drafts")
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Leads", len(leads))
+            k2.metric("Qualified", sum(1 for x in leads if x.get("stage") == "qualified"))
+            k3.metric("Drafts awaiting review", sum(1 for x in drafts if x.get("status") == "draft"))
+
+            st.markdown("#### Research mission")
+            with st.form("natasha_research_form"):
+                product = st.selectbox("Varia product", ["Varia Vision", "Varia Carbon", "Varia Trait-Bridge"])
+                market = st.text_input("Target market", value="Netherlands")
+                icp = st.text_area(
+                    "Ideal customer profile",
+                    value="Agricultural technology companies, crop consultants, and precision-agriculture providers that use drone or field imagery and may need crop/weed detection.",
+                    height=100,
+                )
+                max_companies = st.slider("Maximum companies", 1, 5, 3)
+                run_mission = st.form_submit_button("Run research")
+
+            if run_mission:
+                if len(icp.strip()) < 10 or len(market.strip()) < 2:
+                    st.warning("بازار هدف و شرح مشتری ایده‌آل را کامل کن.")
+                else:
+                    with st.spinner("Natasha is researching prospects. This may take up to a few minutes..."):
+                        try:
+                            result = natasha_post("/api/agent/run", {
+                                "product": product,
+                                "target_market": market,
+                                "ideal_customer": icp,
+                                "max_companies": max_companies,
+                            })
+                            st.success(f"Research completed. {result.get('leads_created', 0)} lead(s) created.")
+                            st.json(result)
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Research failed: {exc}")
+
+            st.markdown("#### Lead pipeline")
+            if leads:
+                company_names = {x.get("id"): x.get("name", "Unknown company") for x in companies}
+                lead_rows = []
+                for lead in leads:
+                    lead_rows.append({
+                        "Company": company_names.get(lead.get("company_id"), "Unknown"),
+                        "Product": lead.get("product"),
+                        "Stage": lead.get("stage"),
+                        "Fit score": lead.get("fit_score"),
+                        "Next action": lead.get("next_action"),
+                    })
+                st.dataframe(pd.DataFrame(lead_rows), use_container_width=True, hide_index=True)
+            else:
+                st.info("هنوز سرنخی ثبت نشده. اولین مأموریت تحقیق را اجرا کن.")
+
+            st.markdown("#### Outreach drafts — human approval required")
+            if drafts:
+                for draft in drafts:
+                    with st.expander(f"{draft.get('subject', 'Untitled')} · {draft.get('status', 'draft')}"):
+                        st.caption(f"To: {draft.get('recipient', 'Not verified')}")
+                        st.write(draft.get("body", ""))
+                        if draft.get("status") == "draft":
+                            st.warning("این پیام فقط پیش‌نویس است؛ ارسال خودکار فعال نیست.")
+            else:
+                st.info("هنوز پیش‌نویس ارتباطی وجود ندارد.")
+
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401:
+                st.session_state.pop("natasha_access_token", None)
+                st.warning("نشست منقضی شده؛ دوباره وارد شو.")
+                st.rerun()
+            else:
+                st.error(f"Natasha API error ({exc.response.status_code}): {exc.response.text[:500]}")
+        except Exception as exc:
+            st.error(f"Could not load Natasha workspace: {exc}")
