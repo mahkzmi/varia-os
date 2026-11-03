@@ -12,6 +12,11 @@ from .settings import settings
 
 app = FastAPI(title="Natasha API", version="0.1.0", docs_url="/docs")
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+
+
 
 def get_db() -> Client:
     if not settings.supabase_url or not settings.supabase_service_role_key:
@@ -205,11 +210,6 @@ def update_lead(
             "metadata": {"from": existing.data["stage"], "to": changes["stage"]},
         }).execute()
     return response.data[0]
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str = Field(min_length=8)
 
 
 class CompanyCreate(BaseModel):
