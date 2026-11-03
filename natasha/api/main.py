@@ -517,6 +517,37 @@ async def run_sales_agent(
 
         try:
             result, llm_message, finish_reason = parse_llm_json(llm_response)
+            # A syntactically valid but empty array is not a successful sales-research run.
+            if not result.get("leads"):
+                retry_payload = {
+                    **llm_payload,
+                    "messages": llm_payload["messages"] + [
+                        {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)},
+                        {"role": "user", "content": (
+                            "Your previous JSON was valid but returned an empty leads array. "
+                            "Re-examine ONLY the supplied search results. If any identifiable organization "
+                            "is relevant or plausibly adjacent to the target customer profile, include the "
+                            "best candidate(s), up to max_companies. Use a conservative fit_score and clearly "
+                            "state uncertainty. Do not invent facts, people, emails, or capabilities. "
+                            'Return only JSON with a non-empty "leads" array when evidence supports a candidate; '
+                            'otherwise return {"leads": []}.'
+                        )},
+                    ],
+                }
+                retry_response = await client.post(
+                    llm_url, headers=llm_headers,
+                    json={**retry_payload, "response_format": {"type": "json_object"}},
+                )
+                if retry_response.status_code in (400, 422):
+                    retry_response = await client.post(llm_url, headers=llm_headers, json=retry_payload)
+                if retry_response.status_code >= 400:
+                    raise HTTPException(status_code=502, detail="LLM returned no leads and the research retry failed")
+                result, llm_message, finish_reason = parse_llm_json(retry_response)
+                if not result.get("leads"):
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"No defensible companies found in {len(search_results)} web search results; no leads were saved",
+                    )
         except (KeyError, IndexError, TypeError, ValueError):
             # Ask the same model to repair its own output once; never persist malformed data.
             try:
