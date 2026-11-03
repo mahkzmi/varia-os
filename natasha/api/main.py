@@ -510,6 +510,7 @@ async def run_sales_agent(
         lead_result = db.table("natasha_leads").insert({
             "user_id": user_id, "company_id": company_id, "product": payload.product,
             "stage": "qualified" if int(item.get("fit_score", 0)) >= 70 else "researching",
+            "currency": "USD",
             "source": "natasha_ai_research",
             "fit_score": max(0, min(100, int(item.get("fit_score", 0)))),
             "fit_rationale": str(item.get("fit_rationale", ""))[:4000],
@@ -518,6 +519,7 @@ async def run_sales_agent(
                 "evidence": item.get("evidence", []),
                 "recommended_angle": item.get("recommended_angle"),
                 "contact_role": item.get("contact_role"),
+                "contact_email_verified": bool(item.get("contact_email_verified", False)),
             }, ensure_ascii=False),
         }).execute()
         if not lead_result.data:
@@ -525,7 +527,7 @@ async def run_sales_agent(
         lead = lead_result.data[0]
         draft = db.table("natasha_message_drafts").insert({
             "user_id": user_id, "lead_id": lead["id"], "channel": "email",
-            "recipient": website or name,
+            "recipient": (str(item.get("contact_email")).strip() if item.get("contact_email_verified") and item.get("contact_email") else "Decision-maker email not verified — research required"),
             "subject": str(item.get("email_subject", "Exploring a potential AgTech collaboration"))[:300],
             "body": str(item.get("email_body", ""))[:12000],
             "status": "draft",
