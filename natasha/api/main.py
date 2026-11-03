@@ -418,7 +418,7 @@ Return strict JSON with key 'leads', an array. Each item: company_name, website,
 industry, fit_score (0-100 integer), fit_rationale, evidence (array of short strings),
 recommended_angle, next_action, contact_role, email_subject, email_body.
 If evidence is weak, lower score and explicitly say what is unknown. Draft concise, specific,
-professional outreach. Do not imply a relationship or claim that Varia has results it has not proven.
+professional outreach. The human sender is Mahdieh Kazemi, Founder of Varia Studio. Never introduce the AI agent as the sender and never sign as Natasha. Write in Mahdieh's first-person founder voice and use this sign-off: Best regards, Mahdieh Kazemi, Founder of Varia Studio. Do not imply a relationship or claim that Varia has results it has not proven.
 Return no markdown fences."""
 
 
