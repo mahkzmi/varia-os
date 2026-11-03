@@ -5,6 +5,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
@@ -12,6 +13,18 @@ from supabase import Client, create_client
 from .settings import settings
 
 app = FastAPI(title="Natasha API", version="0.1.0", docs_url="/docs")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+
 
 class OtpRequest(BaseModel):
     email: str
