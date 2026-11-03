@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
 from .settings import settings
@@ -20,6 +21,7 @@ def get_db() -> Client:
 
 def current_user_id(
     authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Client, Depends(get_db)] = None,
 ) -> str:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
@@ -27,12 +29,46 @@ def current_user_id(
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
     try:
-        user = get_db().auth.get_user(token)
+        user = db.auth.get_user(token)
         if not user or not user.user:
             raise ValueError("No authenticated user")
         return str(user.user.id)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired access token")
+
+
+def validate_owned_relations(
+    db: Client,
+    user_id: str,
+    company_id: UUID | None,
+    primary_contact_id: UUID | None,
+) -> None:
+    if company_id:
+        company = (
+            db.table("natasha_companies")
+            .select("id")
+            .eq("id", str(company_id))
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if not company.data:
+            raise HTTPException(status_code=422, detail="Company not found for this user")
+
+    if primary_contact_id:
+        contact = (
+            db.table("natasha_contacts")
+            .select("id,company_id")
+            .eq("id", str(primary_contact_id))
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if not contact.data:
+            raise HTTPException(status_code=422, detail="Contact not found for this user")
+        linked_company_id = contact.data.get("company_id")
+        if company_id and linked_company_id and linked_company_id != str(company_id):
+            raise HTTPException(status_code=422, detail="Contact does not belong to the selected company")
 
 
 class LeadCreate(BaseModel):
@@ -44,7 +80,7 @@ class LeadCreate(BaseModel):
     estimated_value: float | None = Field(default=None, ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
     next_action: str | None = None
-    next_action_at: str | None = None
+    next_action_at: datetime | None = None
     notes: str | None = None
 
 
@@ -57,7 +93,7 @@ class LeadUpdate(BaseModel):
     estimated_value: float | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     next_action: str | None = None
-    next_action_at: str | None = None
+    next_action_at: datetime | None = None
     notes: str | None = None
 
 
@@ -87,6 +123,7 @@ def create_lead(
     user_id: Annotated[str, Depends(current_user_id)],
     db: Annotated[Client, Depends(get_db)],
 ) -> dict:
+    validate_owned_relations(db, user_id, payload.company_id, payload.primary_contact_id)
     row = payload.model_dump(mode="json")
     row["user_id"] = user_id
     response = db.table("natasha_leads").insert(row).execute()
