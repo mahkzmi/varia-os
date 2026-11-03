@@ -13,9 +13,13 @@ from .settings import settings
 
 app = FastAPI(title="Natasha API", version="0.1.0", docs_url="/docs")
 
-class LoginRequest(BaseModel):
+class OtpRequest(BaseModel):
     email: str
-    password: str = Field(min_length=8)
+
+
+class OtpVerifyRequest(BaseModel):
+    email: str
+    token: str = Field(min_length=6, max_length=8)
 
 
 
@@ -23,6 +27,46 @@ def get_db() -> Client:
     if not settings.supabase_url or not settings.supabase_publishable_key:
         raise HTTPException(status_code=503, detail="Supabase URL or publishable key is missing")
     return create_client(settings.supabase_url, settings.supabase_publishable_key)
+
+
+@app.post("/api/auth/otp/request")
+def request_login_otp(payload: OtpRequest) -> dict:
+    """Send a passwordless email OTP; no Supabase dashboard password is needed."""
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise HTTPException(status_code=503, detail="Supabase configuration is missing")
+    try:
+        auth_client = create_client(settings.supabase_url, settings.supabase_publishable_key)
+        auth_client.auth.sign_in_with_otp({
+            "email": payload.email,
+            "options": {"should_create_user": True},
+        })
+        return {"status": "otp_sent", "email": payload.email}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not send sign-in code. Check Supabase Auth email settings.")
+
+
+@app.post("/api/auth/otp/verify")
+def verify_login_otp(payload: OtpVerifyRequest) -> dict:
+    """Verify email OTP and return a short-lived Supabase access token."""
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise HTTPException(status_code=503, detail="Supabase configuration is missing")
+    try:
+        auth_client = create_client(settings.supabase_url, settings.supabase_publishable_key)
+        result = auth_client.auth.verify_otp({
+            "email": payload.email,
+            "token": payload.token,
+            "type": "email",
+        })
+        if not result.session or not result.user:
+            raise ValueError("No authenticated session returned")
+        return {
+            "access_token": result.session.access_token,
+            "token_type": "bearer",
+            "expires_in": result.session.expires_in,
+            "user": {"id": result.user.id, "email": result.user.email},
+        }
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code")
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
