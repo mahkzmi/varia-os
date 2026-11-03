@@ -486,10 +486,68 @@ async def run_sales_agent(
             llm_response = await client.post(llm_url, headers=llm_headers, json=llm_payload)
         if llm_response.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"LLM provider request failed (HTTP {llm_response.status_code})")
+        def parse_llm_json(response):
+            data = response.json()
+            choices = data.get("choices") or []
+            if not choices:
+                raise ValueError("provider returned no choices")
+            message = choices[0].get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                content = "".join(
+                    part.get("text", "") for part in content if isinstance(part, dict)
+                )
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("provider returned empty message content")
+            cleaned = content.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\\n", 1)[-1]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3].strip()
+            try:
+                parsed = json.loads(cleaned)
+            except ValueError:
+                start, end = cleaned.find("{"), cleaned.rfind("}")
+                if start < 0 or end <= start:
+                    raise
+                parsed = json.loads(cleaned[start:end + 1])
+            if not isinstance(parsed, dict) or not isinstance(parsed.get("leads"), list):
+                raise ValueError("JSON must contain a leads array")
+            return parsed, message, choices[0].get("finish_reason")
+
         try:
-            result = json.loads(llm_response.json()["choices"][0]["message"]["content"])
+            result, llm_message, finish_reason = parse_llm_json(llm_response)
         except (KeyError, IndexError, TypeError, ValueError):
-            raise HTTPException(status_code=502, detail="LLM returned invalid structured output")
+            # Ask the same model to repair its own output once; never persist malformed data.
+            try:
+                raw_content = llm_response.json()["choices"][0]["message"].get("content", "")
+                repair_payload = {
+                    **llm_payload,
+                    "messages": llm_payload["messages"] + [
+                        {"role": "assistant", "content": str(raw_content)[:12000]},
+                        {"role": "user", "content": (
+                            "Your previous response was not valid JSON. Return ONLY one valid JSON object "
+                            'with a top-level "leads" array. Do not use markdown fences or commentary. '
+                            "Preserve the facts and do not add unsupported claims."
+                        )},
+                    ],
+                }
+                repair_response = await client.post(
+                    llm_url, headers=llm_headers,
+                    json={**repair_payload, "response_format": {"type": "json_object"}},
+                )
+                if repair_response.status_code in (400, 422):
+                    repair_response = await client.post(
+                        llm_url, headers=llm_headers, json=repair_payload
+                    )
+                if repair_response.status_code >= 400:
+                    raise ValueError("provider rejected JSON repair request")
+                result, llm_message, finish_reason = parse_llm_json(repair_response)
+            except (KeyError, IndexError, TypeError, ValueError):
+                raise HTTPException(
+                    status_code=502,
+                    detail="LLM could not produce valid JSON after one repair attempt; no leads were saved",
+                )
 
     created = []
     for item in result.get("leads", [])[:payload.max_companies]:
