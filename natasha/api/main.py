@@ -97,6 +97,11 @@ class LeadUpdate(BaseModel):
     notes: str | None = None
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"service": "Natasha API", "status": "online", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "natasha-api"}
