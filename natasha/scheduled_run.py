@@ -5,10 +5,9 @@ import os
 import time
 from datetime import datetime, timezone
 
-from supabase import create_client
+import httpx
 
 from natasha.worker import claim_one, get_db, process_job
-import httpx
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -90,6 +89,8 @@ def main() -> None:
             if not job:
                 break
             process_job(db, job, client)
+            if job.get("id") == job_id:
+                break
 
     remaining = (
         db.table("natasha_jobs")
@@ -98,7 +99,14 @@ def main() -> None:
         .limit(1)
         .execute()
     )
-    logger.info("Scheduled mission final state: %s", remaining.data or "not found")
+    final_state = remaining.data[0] if remaining.data else None
+    logger.info("Scheduled mission final state: %s", final_state or "not found")
+    if not final_state or final_state.get("status") != "succeeded":
+        status = final_state.get("status") if final_state else "missing"
+        error = final_state.get("last_error") if final_state else "job not found"
+        raise RuntimeError(
+            f"Natasha scheduled mission did not succeed: status={status}; error={error}"
+        )
 
 
 if __name__ == "__main__":
