@@ -42,6 +42,40 @@ def claim_one(db: Client) -> dict | None:
     return rows[0] if rows else None
 
 
+def claim_office_one(db: Client) -> dict | None:
+    result = db.rpc("office_claim_tasks", {"p_limit": 1}).execute()
+    rows = result.data or []
+    return rows[0] if rows else None
+
+
+def process_office_task(db: Client, task: dict, client: httpx.Client) -> None:
+    task_id = task["id"]
+    try:
+        response = client.post(
+            f"{NATASHA_API_URL}/api/office/internal/run",
+            headers={"X-Internal-Key": SUPABASE_SERVICE_ROLE_KEY},
+            json={"user_id": task["user_id"], "task": task},
+        )
+        response.raise_for_status()
+        output = response.json()
+        logger.info("Office task %s succeeded (%s)", task_id, task.get("agent"))
+    except Exception as exc:
+        attempts = int(task.get("attempts") or 1)
+        max_attempts = int(task.get("max_attempts") or 4)
+        retry = attempts < max_attempts
+        delay = min(900, 20 * (2 ** max(0, attempts - 1)))
+        update = {
+            "status": "queued" if retry else "failed",
+            "locked_at": None,
+            "error": str(exc)[:3000],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if retry:
+            update["run_at"] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()
+        db.table("office_tasks").update(update).eq("id", task_id).execute()
+        logger.exception("Office task %s failed (attempt %s/%s); retry=%s", task_id, attempts, max_attempts, retry)
+
+
 def process_job(db: Client, job: dict, client: httpx.Client) -> None:
     job_id = job["id"]
     try:
@@ -88,6 +122,10 @@ def main() -> None:
                 job = claim_one(db)
                 if job:
                     process_job(db, job, client)
+                    continue
+                office_task = claim_office_one(db)
+                if office_task:
+                    process_office_task(db, office_task, client)
                     continue
             except Exception:
                 logger.exception("Worker polling cycle failed")
