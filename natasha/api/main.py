@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -493,6 +493,31 @@ async def run_sales_agent(
     import json
     import httpx
 
+    # Hard daily cap across all Natasha runs for this user and product (UTC).
+    now_utc = datetime.now(timezone.utc)
+    day_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    todays_leads = (
+        db.table("natasha_leads")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .eq("product", payload.product)
+        .eq("source", "natasha_ai_research")
+        .gte("created_at", day_start.isoformat())
+        .lt("created_at", day_end.isoformat())
+        .execute()
+    )
+    created_today = todays_leads.count if todays_leads.count is not None else len(todays_leads.data or [])
+    remaining_daily_quota = max(0, 10 - created_today)
+    if remaining_daily_quota == 0:
+        return {
+            "status": "daily_limit_reached",
+            "daily_limit": 10,
+            "leads_created": 0,
+            "leads": [],
+        }
+    run_limit = min(run_limit, remaining_daily_quota)
+
     query = (
         f"companies organizations {payload.target_market} {payload.ideal_customer} "
         f"related to {payload.product} agriculture technology"
@@ -504,7 +529,7 @@ async def run_sales_agent(
                 "api_key": settings.tavily_api_key,
                 "query": query,
                 "search_depth": "advanced",
-                "max_results": min(payload.max_companies * 3, 20),
+                "max_results": min(run_limit * 3, 20),
                 "include_answer": False,
             },
         )
@@ -530,7 +555,7 @@ async def run_sales_agent(
                         {"title": x.get("title"), "url": x.get("url"), "content": str(x.get("content", ""))[:2500]}
                         for x in search_results
                     ],
-                    "max_companies": payload.max_companies,
+                    "max_companies": run_limit,
                 }, ensure_ascii=False)},
             ],
         }
@@ -638,7 +663,7 @@ async def run_sales_agent(
                 )
 
     created = []
-    for item in result.get("leads", [])[:payload.max_companies]:
+    for item in result.get("leads", [])[:run_limit]:
         name = str(item.get("company_name", "")).strip()
         if not name:
             continue
