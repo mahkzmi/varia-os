@@ -10,7 +10,7 @@ import {
 const API = (import.meta.env.VITE_NATASHA_API_URL || "https://natasha-api.onrender.com").replace(/\/$/, "");
 const PRODUCTS = ["Varia Vision", "Varia Carbon", "Varia Trait-Bridge"];
 type AnyRow = Record<string, any>;
-type Section = "Overview" | "AI Office" | "Natasha" | "Pipeline" | "Companies" | "Contacts" | "Drafts" | "Activity";
+type Section = "Overview" | "Natasha" | "Pipeline" | "Companies" | "Contacts" | "Drafts" | "Activity";
 
 async function request(path: string, token?: string, options: RequestInit = {}) {
   const response = await fetch(API + path, {
@@ -131,7 +131,6 @@ function App() {
   }), [data]);
   const nav: {label:Section;icon:any;group:string}[] = [
     {label:"Overview",icon:LayoutDashboard,group:"WORKSPACE"},
-    {label:"AI Office",icon:BriefcaseBusiness,group:"WORKSPACE"},
     {label:"Natasha",icon:Bot,group:"WORKSPACE"},
     {label:"Pipeline",icon:Target,group:"GROWTH"},
     {label:"Companies",icon:Building2,group:"GROWTH"},
@@ -177,8 +176,7 @@ function App() {
       <div className="content-wrap">
         {error&&<div className="error-banner"><span>{error}</span><button onClick={()=>setError("")}><X size={16}/></button></div>}
         {section==="Overview"&&<Overview stats={stats} data={data} companyMap={companyMap} setSection={setSection} loading={loading}/>}
-        {section==="AI Office"&&<Office token={token} notify={notify}/>}
-        {section==="Natasha"&&<Natasha mission={mission} setMission={setMission} runMission={runMission} busy={missionBusy} jobs={data.jobs} drafts={data.drafts} leads={data.leads} companies={data.companies} companyMap={companyMap} approveDraft={approveDraft} setSection={setSection}/>}
+        {section==="Natasha"&&<><Office token={token} notify={notify}/><Natasha mission={mission} setMission={setMission} runMission={runMission} busy={missionBusy} jobs={data.jobs} drafts={data.drafts} leads={data.leads} companies={data.companies} companyMap={companyMap} approveDraft={approveDraft} setSection={setSection}/></>}
         {section==="Pipeline"&&<Pipeline leads={filteredLeads} companies={data.companies} companyMap={companyMap} search={search} setSearch={setSearch} onAdd={()=>setShowLead(true)}/>}
         {section==="Companies"&&<Companies companies={data.companies} search={search} setSearch={setSearch} onAdd={()=>setShowCompany(true)}/>}
         {section==="Contacts"&&<Contacts contacts={data.contacts} companies={data.companies} search={search} setSearch={setSearch} onAdd={()=>setShowContact(true)}/>}
@@ -211,8 +209,8 @@ function Overview({stats,data,companyMap,setSection,loading}:any) {
 function Metric({icon:Icon,label,value,note,accent}:any){return <div className="metric-card"><div className="metric-top"><span>{label}</span><div className={`metric-icon ${accent||""}`}><Icon size={17}/></div></div><strong>{value}</strong><small>{note}</small></div>}
 function Natasha({mission,setMission,runMission,busy,jobs,drafts,leads,companies,companyMap,approveDraft,setSection}:any) {
   const pending=drafts.filter((x:AnyRow)=>x.status==="draft");
-  return <><PageHeading eyebrow="INTELLIGENCE LAYER · NATASHA" title="Your research partner." subtitle="Find the right companies, understand their fit, and prepare thoughtful founder-led outreach." action={<div className="agent-status"><span className="live-dot"/> AGENT ONLINE</div>}/>
-    <div className="natasha-layout"><div className="natasha-main"><div className="agent-banner"><div className="agent-avatar"><Bot size={27}/><span/></div><div><div className="agent-name">Natasha <span className="agent-badge">AI AGENT</span></div><p>Research-led sales intelligence for Varia Studio</p></div><div className="agent-banner-right"><span>HUMAN-IN-THE-LOOP</span><ShieldCheck size={18}/></div></div>
+  return <><PageHeading eyebrow="INTELLIGENCE LAYER · NATASHA" title="Commercial intelligence." subtitle="Research the market, qualify opportunities and move the right prospects toward a pilot." action={<div className="agent-status"><span className="live-dot"/> AGENT ONLINE</div>}/>
+    <div className="natasha-layout"><div className="natasha-main"><div className="agent-banner"><div className="agent-avatar"><Bot size={27}/><span/></div><div><div className="agent-name">Natasha <span className="agent-badge">AI AGENT</span></div><p>One executive partner across Varia Studio</p></div><div className="agent-banner-right"><span>HUMAN-IN-THE-LOOP</span><ShieldCheck size={18}/></div></div>
       <div className="panel mission-panel"><div className="panel-head"><div><div className="eyebrow muted">NEW WORKFLOW</div><h3>Launch a research mission</h3><p>Natasha will search, qualify, and prepare a first-touch draft.</p></div><div className="mission-symbol"><Compass size={22}/></div></div>
         <div className="form-grid"><div><label>Product focus</label><select value={mission.product} onChange={e=>setMission({...mission,product:e.target.value})}>{PRODUCTS.map(x=><option key={x}>{x}</option>)}</select></div><div><label>Target market</label><input value={mission.target_market} onChange={e=>setMission({...mission,target_market:e.target.value})} placeholder="e.g. Netherlands"/></div></div>
         <label>Ideal customer profile</label><textarea className="mission-textarea" value={mission.ideal_customer} onChange={e=>setMission({...mission,ideal_customer:e.target.value})}/>
@@ -220,7 +218,7 @@ function Natasha({mission,setMission,runMission,busy,jobs,drafts,leads,companies
         <div className="privacy-note"><ShieldCheck size={14}/> Natasha never invents evidence. Every outreach draft waits for your approval.</div>
       </div>
       <div className="panel"><div className="panel-head"><div><h3>Mission history</h3><p>Recent research jobs</p></div><span className="small-count">{jobs.length} jobs</span></div>{jobs.length?jobs.slice(0,5).map((job:AnyRow)=><div className="list-row" key={job.id}><div className="job-icon"><Zap size={16}/></div><div className="row-main"><strong>{job.payload?.product || "Research mission"}</strong><small>{job.payload?.target_market || "Market not specified"} · {dateLabel(job.created_at)}</small></div><span className={`status-text ${job.status}`}>{job.status}</span></div>):<Empty title="No missions yet" body="Your completed and queued missions will be tracked here."/>}</div>
-    </div><div className="natasha-side"><div className="panel agent-profile"><div className="profile-glow"><div className="agent-avatar large"><Bot size={31}/></div></div><h3>Natasha</h3><p>Sales intelligence agent</p><div className="profile-divider"/><div className="profile-stat"><span>Leads sourced</span><strong>{leads.length}</strong></div><div className="profile-stat"><span>Companies in CRM</span><strong>{companies.length}</strong></div><div className="profile-stat"><span>Drafts awaiting you</span><strong>{pending.length}</strong></div><div className="profile-divider"/><div className="capability"><Search size={15}/> Market & company research</div><div className="capability"><Gauge size={15}/> ICP fit qualification</div><div className="capability"><Mail size={15}/> Founder-voice outreach drafts</div><div className="capability"><ShieldCheck size={15}/> Human approval workflow</div></div>
+    </div><div className="natasha-side"><div className="panel agent-profile"><div className="profile-glow"><div className="agent-avatar large"><Bot size={31}/></div></div><h3>Natasha</h3><p>AI Executive Partner</p><div className="profile-divider"/><div className="profile-stat"><span>Leads sourced</span><strong>{leads.length}</strong></div><div className="profile-stat"><span>Companies in CRM</span><strong>{companies.length}</strong></div><div className="profile-stat"><span>Drafts awaiting you</span><strong>{pending.length}</strong></div><div className="profile-divider"/><div className="capability"><Search size={15}/> Market & company research</div><div className="capability"><Gauge size={15}/> ICP fit qualification</div><div className="capability"><Mail size={15}/> Founder-voice outreach drafts</div><div className="capability"><ShieldCheck size={15}/> Human approval workflow</div></div>
       <div className="panel"><div className="panel-head"><div><h3>Review queue</h3><p>Drafts waiting for your decision</p></div><button className="quiet-link" onClick={()=>setSection("Drafts")}>Open <ArrowUpRight size={14}/></button></div>{pending.length?pending.slice(0,3).map((d:AnyRow)=><div className="draft-mini" key={d.id}><strong>{d.subject}</strong><small>{d.recipient}</small><button className="text-btn" onClick={()=>approveDraft(d.id)}>Approve draft <Check size={14}/></button></div>):<div className="empty-note"><Check size={18}/> No pending drafts</div>}</div>
     </div></div>
   </>;
