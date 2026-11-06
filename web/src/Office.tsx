@@ -72,7 +72,7 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
  }
  const pending=approvals.filter(x=>x.status==="pending");
  return <div className="office-page">
-  <div className="page-heading"><div><div className="eyebrow muted">VARIA STUDIO · AI-NATIVE WORKSPACE</div><h1>Varia AI Office.</h1><p>One shared workspace for sales, creative work and studio operations. External actions stay under your control.</p></div><button className="secondary-btn" onClick={refresh} disabled={loading}><Activity size={15}/> {loading?"Refreshing…":"Refresh"}</button></div>
+  <div className="page-heading"><div><div className="eyebrow muted">VARIA STUDIO · AI-NATIVE WORKSPACE</div><h1>Varia AI Office.</h1><p>One shared workspace for sales, creative work and studio operations. External actions stay under your control.</p></div><button className="secondary-btn" onClick={()=>refresh()} disabled={loading}><Activity size={15}/> {loading?"Refreshing…":"Refresh"}</button></div>
   {error&&<div className="error-banner"><span>{error}</span><button onClick={()=>setError("")}><X size={15}/></button></div>}
   <div className="office-metrics">
    <div className="metric-card"><div className="metric-top">Agents <Bot size={17}/></div><strong>{overview?.agents??3}</strong><small>Shared office team</small></div>
