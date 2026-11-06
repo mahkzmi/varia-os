@@ -685,6 +685,17 @@ async def run_sales_agent(
                 continue
             company_id = company_result.data[0]["id"]
 
+        # Do not create another active lead for the same company/product on every research run.
+        existing_active = (
+            db.table("natasha_leads").select("id,stage")
+            .eq("user_id", user_id).eq("company_id", company_id)
+            .eq("product", payload.product)
+            .not_.in_("stage", ["won", "lost", "disqualified"])
+            .limit(1).execute()
+        )
+        if existing_active.data:
+            continue
+
         lead_result = db.table("natasha_leads").insert({
             "user_id": user_id, "company_id": company_id, "product": payload.product,
             "offer_route": item.get("recommended_offer_route") if item.get("recommended_offer_route") in {"audit", "pilot", "api_white_label", "discovery_pending"} else "discovery_pending",
