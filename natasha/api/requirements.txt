@@ -3,3 +3,4 @@ uvicorn[standard]
 pydantic-settings
 supabase
 httpx
+cryptography>=42,<47
