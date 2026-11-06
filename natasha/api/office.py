@@ -322,8 +322,48 @@ Return strict JSON. Always include summary, deliverable, sections, open_question
 For task_type content_draft, also include platform, account_type, title, body and media_brief. Keep all copy fact-checked and ready for founder review.
 For project_brief or operational tasks, make the deliverable structured, actionable and explicit about owners, dependencies, acceptance criteria and risks where evidence supports them.
 For sales and market tasks, distinguish sourced evidence from fit hypotheses and never fabricate sources or contacts.
-For task_type autonomous_cycle, review the supplied Varia state and return a concise daily operating plan plus a top-level next_tasks array of at most 4 executable tasks. Each task must contain task_type (one of research, lead_research, sales_research, content_draft, project_brief, operations), title, description, payload object and priority 1-5. Prefer evidence-backed Varia Vision prospect research, then sales follow-up preparation, pilot-readiness work and founder-brand content. Never queue an external send or publish action. If there is insufficient evidence, create a research task rather than asserting conclusions."""
+For task_type pipeline_review, use business_state.recent_leads and the CRM counts to identify duplicate or weak prospects, the highest-priority plausible buyers, missing decision-maker/contact data, and the next best action for each. Do not change lead stages automatically. Explicitly distinguish research fit from qualification and buying intent.
+For task_type autonomous_cycle, use the supplied business_state as the source of truth. Never ask the founder to provide CRM data already present there. Return a concise daily operating plan plus a top-level next_tasks array of at most 4 executable tasks. Each task must contain task_type (one of research, lead_research, sales_research, content_draft, project_brief, operations), title, description, payload object and priority 1-5. Prefer evidence-backed Varia Vision prospect research, then sales follow-up preparation, pilot-readiness work and founder-brand content. Never queue an external send or publish action. If there is insufficient evidence, create a research task rather than asserting conclusions."""
+            # Give Natasha the real persisted sales state so daily planning does not ask the founder
+            # to re-supply CRM data that already exists in Varia OS.
+            pipeline_rows = (db.table("natasha_leads")
+                .select("id,company_id,product,stage,fit_score,offer_route,estimated_value,currency,next_action,notes,created_at")
+                .eq("user_id", user_id).order("created_at", desc=True).limit(50).execute().data or [])
+            company_rows = (db.table("natasha_companies")
+                .select("id,name,website,industry,country").eq("user_id", user_id).limit(100).execute().data or [])
+            contact_rows = (db.table("natasha_contacts")
+                .select("id,company_id,role,email,is_decision_maker").eq("user_id", user_id).limit(200).execute().data or [])
+            draft_rows = (db.table("natasha_message_drafts")
+                .select("id,status,recipient,lead_id").eq("user_id", user_id).limit(200).execute().data or [])
+            followup_rows = (db.table("natasha_follow_ups")
+                .select("id,status,due_at,lead_id").eq("user_id", user_id).limit(100).execute().data or [])
+            company_map = {str(row["id"]): row for row in company_rows}
+            stage_counts = {}
+            for row in pipeline_rows:
+                stage_name = str(row.get("stage") or "unknown")
+                stage_counts[stage_name] = stage_counts.get(stage_name, 0) + 1
+            business_state = {
+                "companies_tracked": len(company_rows),
+                "leads_total": len(pipeline_rows),
+                "leads_by_stage": stage_counts,
+                "qualified_leads": sum(1 for row in pipeline_rows if row.get("stage") in {"qualified", "contacted", "replied", "meeting", "proposal", "pilot"}),
+                "won_leads": sum(1 for row in pipeline_rows if row.get("stage") == "won"),
+                "contacts_total": len(contact_rows),
+                "contacts_with_email": sum(1 for row in contact_rows if row.get("email")),
+                "decision_maker_contacts": sum(1 for row in contact_rows if row.get("is_decision_maker")),
+                "message_drafts_total": len(draft_rows),
+                "message_drafts_unverified_recipient": sum(1 for row in draft_rows if not row.get("recipient") or "not verified" in str(row.get("recipient")).lower()),
+                "followups_total": len(followup_rows),
+                "recent_leads": [{
+                    "company": (company_map.get(str(row.get("company_id"))) or {}).get("name", "Unlinked"),
+                    "website": (company_map.get(str(row.get("company_id"))) or {}).get("website"),
+                    "product": row.get("product"), "stage": row.get("stage"),
+                    "fit_score": row.get("fit_score"), "offer_route": row.get("offer_route"),
+                    "next_action": row.get("next_action"), "notes": str(row.get("notes") or "")[:1200],
+                } for row in pipeline_rows[:25]],
+            }
             user_payload = {
+                "business_state": business_state,
                 "agent": agent, "task_type": task.get("task_type"),
                 "title": task.get("title"), "description": task.get("description"),
                 "payload": task.get("payload") or {},
@@ -368,13 +408,14 @@ For task_type autonomous_cycle, review the supplied Varia state and return a con
             output = json.loads(cleaned)
 
             if agent == "natasha" and task.get("task_type") == "autonomous_cycle":
-                allowed_child_types = {"research", "lead_research", "sales_research", "content_draft", "project_brief", "operations"}
+                allowed_child_types = {"research", "lead_research", "sales_research", "pipeline_review", "content_draft", "project_brief", "operations"}
                 child_tasks = output.get("next_tasks") if isinstance(output.get("next_tasks"), list) else []
                 if not child_tasks:
                     deliverable = output.get("deliverable") if isinstance(output.get("deliverable"), dict) else {}
                     sections = deliverable.get("sections") if isinstance(deliverable.get("sections"), list) else output.get("sections", [])
                     section_routes = [
-                        (("qualified", "buyer", "prospect", "lead"), "lead_research"),
+                        (("qualified", "buyer", "prospect", "lead"), "pipeline_review"),
+                        (("sales", "follow-up", "follow up"), "lead_research"),
                         (("pilot", "product", "credibility"), "project_brief"),
                         (("founder", "brand", "content"), "content_draft"),
                         (("studio", "operations", "ops"), "operations"),
