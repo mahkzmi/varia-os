@@ -123,7 +123,7 @@ The current database already supports:
 - `natasha_follow_ups`: title, due date, status.
 - `natasha_message_drafts`: recipient, subject, body, approval/sent status.
 
-Use the dedicated `natasha_leads.offer_route` field for the selected commercial route. Allowed values are `audit`, `pilot`, `api_white_label`, and `discovery_pending`. The database defaults existing and new manually created leads to `discovery_pending`; Natasha may suggest a route, but the founder must review it before treating it as the commercial choice.
+Use the dedicated `natasha_leads.offer_route` field for the provisional suggested commercial route. Allowed values are `audit`, `pilot`, `api_white_label`, and `discovery_pending`. The database defaults existing and new manually created leads to `discovery_pending`; Natasha may suggest a route, but the founder must review and confirm it before treating it as the commercial choice.
 
 Store evidence as source URLs and short factual observations. Do not put unverified assumptions into the company description as facts.
 
