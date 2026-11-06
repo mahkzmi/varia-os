@@ -473,7 +473,8 @@ Your job: qualify companies as potential buyers/partners. Use ONLY supplied sear
 Never invent company facts, people, emails, revenue, customers, or product capabilities.
 Return strict JSON with key 'leads', an array. Each item: company_name, website, country,
 industry, fit_score (0-100 integer), fit_rationale, evidence (array of short strings),
-recommended_angle, next_action, contact_role, email_subject, email_body.
+recommended_angle, recommended_offer_route (one of audit, pilot, api_white_label, discovery_pending),
+next_action, contact_role, email_subject, email_body.
 If evidence is weak, lower score and explicitly say what is unknown. Draft concise, specific,
 professional outreach. The human sender is Mahdieh Kazemi, Founder of Varia Studio. Never introduce the AI agent as the sender and never sign as Natasha. Write in Mahdieh's first-person founder voice and use this sign-off: Best regards, Mahdieh Kazemi, Founder of Varia Studio. Do not imply a relationship or claim that Varia has results it has not proven.
 Return no markdown fences."""
@@ -688,7 +689,7 @@ async def run_sales_agent(
 
         lead_result = db.table("natasha_leads").insert({
             "user_id": user_id, "company_id": company_id, "product": payload.product,
-            "stage": "qualified" if int(item.get("fit_score", 0)) >= 70 else "researching",
+            "stage": "researching",  # AI fit score prioritizes review; only founder evidence can qualify a buyer.
             "currency": "USD",
             "source": "natasha_ai_research",
             "fit_score": max(0, min(100, int(item.get("fit_score", 0)))),
@@ -697,6 +698,7 @@ async def run_sales_agent(
             "notes": json.dumps({
                 "evidence": item.get("evidence", []),
                 "recommended_angle": item.get("recommended_angle"),
+                "recommended_offer_route": item.get("recommended_offer_route", "discovery_pending"),
                 "contact_role": item.get("contact_role"),
                 "contact_email_verified": bool(item.get("contact_email_verified", False)),
             }, ensure_ascii=False),
