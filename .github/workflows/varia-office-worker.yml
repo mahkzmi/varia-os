@@ -2,6 +2,7 @@ name: Varia AI Office Worker
 # Dispatch on workflow changes so queued work can be drained immediately.
 # Retry and recovery are handled by the queue lease in Supabase.
 # Manual dispatch after API rollout to drain queued QA work.
+# Follow-up worker tick after the first post-deploy retry window.
 
 on:
   push:
