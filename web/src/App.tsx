@@ -128,7 +128,7 @@ function App() {
     catch(e) { setError(e instanceof Error?e.message:"Could not delete draft."); }
   }
   async function researchContacts(leadId:string) {
-    try { const result=await request(`/api/leads/${leadId}/research-contacts`,token,{method:"POST",body:JSON.stringify({})}); await loadData(); notify(`${result.contacts_created||0} evidenced contacts found.`); }
+    try { const result=await request(`/api/leads/${leadId}/research-contacts`,token,{method:"POST",body:JSON.stringify({})}); await loadData(); notify(`${result.contacts_created||0} contacts · ${result.drafts_created||0} message drafts created.`); }
     catch(e) { setError(e instanceof Error?e.message:"Contact research failed."); }
   }
   async function approveDraft(id: string) {
@@ -273,7 +273,7 @@ function Companies({companies,search,setSearch,onAdd}:any){const filtered=compan
 function Contacts({contacts,companies,search,setSearch,onAdd}:any) {
   const companyNames = Object.fromEntries(companies.map((company:AnyRow) => [company.id, company.name]));
   const filtered = contacts.filter((contact:AnyRow) =>
-    [contact.full_name, contact.role, contact.email, companyNames[contact.company_id]]
+    [contact.full_name, contact.role, contact.email, contact.linkedin_url, contact.notes, (contact.source_urls||[]).join(" "), companyNames[contact.company_id]]
       .join(" ").toLowerCase().includes(search.toLowerCase())
   );
   return (
@@ -294,15 +294,15 @@ function Contacts({contacts,companies,search,setSearch,onAdd}:any) {
       <div className="panel table-panel">
         <div className="table-wrap">
           <table>
-            <thead><tr><th>CONTACT</th><th>COMPANY</th><th>ROLE</th><th>EMAIL</th><th>LINKEDIN</th></tr></thead>
+            <thead><tr><th>CONTACT</th><th>COMPANY</th><th>ROLE</th><th>EMAIL</th><th>LINKEDIN</th><th>SOURCES</th></tr></thead>
             <tbody>
               {filtered.map((contact:AnyRow) => (
                 <tr key={contact.id}>
                   <td><div className="contact-cell"><div className="row-avatar">{initials(contact.full_name)}</div><div className="table-primary">{contact.full_name}</div></div></td>
                   <td>{companyNames[contact.company_id] || "—"}</td>
                   <td>{contact.role || "—"}</td>
-                  <td>{contact.email || "—"}</td>
-                  <td>{contact.linkedin_url ? <a href={contact.linkedin_url} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={13}/></a> : "—"}</td>
+                  <td>{contact.email ? <><a href={"mailto:"+contact.email}>{contact.email}</a><div className="table-secondary">{contact.email_verified ? "SOURCE VERIFIED" : "NOT VERIFIED"}</div></> : "—"}</td>
+                  <td>{contact.linkedin_url ? <a href={contact.linkedin_url} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={13}/><div className="table-secondary">{contact.linkedin_verified ? "SOURCE VERIFIED" : "UNVERIFIED"}</div></a> : "—"}</td><td>{(contact.source_urls||[]).length ? <div className="source-links">{contact.source_urls.map((url:string,i:number)=><a key={url} href={url} target="_blank" rel="noreferrer">Source {i+1} <ArrowUpRight size={11}/></a>)}</div> : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -323,9 +323,9 @@ function Drafts({drafts,approveDraft,onSave,onDelete,companyMap}:any){
 function DraftEditor({draft,onSave,onDelete,approveDraft,companyMap}:any){
  const [editing,setEditing]=useState(false); const [subject,setSubject]=useState(draft.subject||""); const [recipient,setRecipient]=useState(draft.recipient||""); const [body,setBody]=useState(draft.body||""); const [channel,setChannel]=useState(draft.channel||"email"); const [busy,setBusy]=useState(false);
  useEffect(()=>{setSubject(draft.subject||"");setRecipient(draft.recipient||"");setBody(draft.body||"");setChannel(draft.channel||"email");},[draft]);
- const copy=()=>{navigator.clipboard?.writeText(body);};
+ const copy=async()=>{try{await navigator.clipboard.writeText(body);}catch{const node=document.createElement("textarea");node.value=body;document.body.appendChild(node);node.select();document.execCommand("copy");node.remove();}};
  return <article className="panel draft-card"><div className="draft-card-head"><div className="draft-type"><MessageSquareText size={16}/> {(draft.channel||"email").toUpperCase()} OUTREACH</div><span className={`status-badge ${draft.status}`}>{draft.status}</span></div>
- {editing?<div className="draft-editor"><label>Platform</label><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="website">Website / contact page</option><option value="contact_form">Contact form</option><option value="other">Other</option></select><label>Recipient / destination</label><input value={recipient} onChange={e=>setRecipient(e.target.value)}/><label>Subject / opening line</label><input value={subject} onChange={e=>setSubject(e.target.value)}/><label>Message</label><textarea rows={8} value={body} onChange={e=>setBody(e.target.value)}/><div className="draft-actions"><button className="primary-btn" disabled={busy} onClick={async()=>{setBusy(true);await onSave(draft.id,{channel,recipient,subject,body});setBusy(false);setEditing(false);}}>Save changes</button><button className="quiet-link" onClick={()=>setEditing(false)}>Cancel</button></div></div>:<><h3>{draft.subject}</h3><div className="draft-to">TO <strong>{draft.recipient}</strong> · {companyMap[draft.lead_id]?.name||"Varia prospect"}</div><div className="draft-body">{draft.body}</div><div className="draft-actions"><button className="secondary-btn" onClick={copy}><CopyIcon/> Copy message</button>{draft.status==="draft"&&<button className="secondary-btn" onClick={()=>setEditing(true)}>Edit</button>}{draft.status==="draft"&&<button className="quiet-link danger-text" onClick={()=>onDelete(draft.id)}>Delete</button>}</div></>}
+ {editing?<div className="draft-editor"><label>Platform</label><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="website">Website / contact page</option><option value="contact_form">Contact form</option><option value="other">Other</option></select><label>Recipient / destination</label><input value={recipient} onChange={e=>setRecipient(e.target.value)}/><label>Subject / opening line</label><input value={subject} onChange={e=>setSubject(e.target.value)}/><label>Message</label><textarea rows={8} value={body} onChange={e=>setBody(e.target.value)}/><div className="draft-actions"><button className="primary-btn" disabled={busy} onClick={async()=>{setBusy(true);try{await onSave(draft.id,{channel,recipient,subject,body});setEditing(false);}finally{setBusy(false);}}}>Save changes</button><button className="quiet-link" onClick={()=>setEditing(false)}>Cancel</button></div></div>:<><h3>{draft.subject}</h3><div className="draft-to">TO <strong>{draft.recipient}</strong> · {companyMap[draft.lead_id]?.name||"Varia prospect"}</div><div className="draft-body">{draft.body}</div><div className="draft-actions"><button className="secondary-btn" onClick={copy}><CopyIcon/> Copy message</button>{draft.status==="draft"&&<button className="secondary-btn" onClick={()=>setEditing(true)}>Edit</button>}{draft.status==="draft"&&<button className="quiet-link danger-text" onClick={()=>onDelete(draft.id)}>Delete</button>}</div></>}
  <div className="draft-card-foot"><span>Created {dateLabel(draft.created_at)}</span>{draft.status==="approved"&&<span className="approved-note"><ShieldCheck size={14}/> Approved · not sent</span>}</div></article>;
 }
 function CopyIcon(){return <FileText size={14}/>}
