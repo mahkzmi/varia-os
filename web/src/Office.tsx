@@ -16,6 +16,9 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
  const [chatBusy,setChatBusy]=useState(false);
  const [error,setError]=useState("");
  const [memories,setMemories]=useState<any[]>([]);
+ const [tasks,setTasks]=useState<any[]>([]);
+ const [approvals,setApprovals]=useState<any[]>([]);
+ const [contentDrafts,setContentDrafts]=useState<any[]>([]);
  const [memoryText,setMemoryText]=useState("");
  const [memoryBusy,setMemoryBusy]=useState(false);
 
@@ -30,7 +33,13 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
   try{setMemories(await call("/api/office/memories",token));}
   catch(e){setError(e instanceof Error?e.message:"Could not load founder context");}
  }
- useEffect(()=>{loadConversations();loadMemories();},[token]);
+ async function loadStudioWork(){
+  try{
+   const [t,a,d]=await Promise.all([call("/api/office/tasks",token),call("/api/office/approvals",token),call("/api/office/content",token)]);
+   setTasks(t);setApprovals(a);setContentDrafts(d);
+  }catch(e){setError(e instanceof Error?e.message:"Could not load studio work");}
+ }
+ useEffect(()=>{loadConversations();loadMemories();loadStudioWork();},[token]);
  useEffect(()=>{
   if(!activeConversation?.id){setMessages([]);return;}
   let alive=true;
@@ -64,6 +73,10 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
    await loadConversations();
   }catch(e){setError(e instanceof Error?e.message:"Message failed");}
   finally{setChatBusy(false);}
+ }
+ async function reviewApproval(id:string,decision:"approved"|"rejected"){
+  try{await call("/api/office/approvals/"+id+"/review",token,{decision});await loadStudioWork();notify(decision==="approved"?"Decision recorded. No external action was sent.":"Request rejected.");}
+  catch(e){setError(e instanceof Error?e.message:"Could not record decision");}
  }
  async function saveMemory(e:React.FormEvent){
   e.preventDefault();if(!memoryText.trim())return;
@@ -106,6 +119,23 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
       <button className="primary-btn" disabled={chatBusy||!chatText.trim()}>{chatBusy?"Thinking…":<><Send size={14}/> Send</>}</button>
      </form>
     </div>
+   </div>
+  </section>
+  <section className="hq-work-grid hq-work-grid-single">
+   <div className="panel hq-queue-panel">
+    <div className="panel-head"><div><span className="eyebrow">EXECUTION</span><h3>Work queue</h3></div><span className="small-count">{tasks.length}</span></div>
+    {tasks.slice(0,4).map((t:any)=><div className="hq-task" key={t.id}><span className="hq-task-dot"/><div><b>{t.title}</b><small>Natasha · {t.status}</small>{t.result?.summary&&<p>{t.result.summary}</p>}</div></div>)}
+    {!tasks.length&&<div className="empty-note">No queued studio tasks.</div>}
+   </div>
+   <div className="panel hq-queue-panel">
+    <div className="panel-head"><div><span className="eyebrow">FOUNDER CONTROL</span><h3>Approval queue</h3></div><span className="small-count">{approvals.filter((a:any)=>a.status==="pending").length}</span></div>
+    {approvals.filter((a:any)=>a.status==="pending").slice(0,3).map((a:any)=><div className="hq-approval" key={a.id}><b>{a.title}</b><p>{a.summary}</p><small>Natasha · {a.action_type}</small><div><button className="secondary-btn" onClick={()=>reviewApproval(a.id,"approved")}>Approve</button><button className="quiet-link" onClick={()=>reviewApproval(a.id,"rejected")}>Reject</button></div></div>)}
+    {!approvals.some((a:any)=>a.status==="pending")&&<div className="empty-note">Nothing needs your decision.</div>}
+   </div>
+   <div className="panel hq-queue-panel">
+    <div className="panel-head"><div><span className="eyebrow">CREATIVE OUTPUT</span><h3>Content drafts</h3></div><span className="small-count">{contentDrafts.length}</span></div>
+    {contentDrafts.slice(0,3).map((d:any)=><div className="hq-content-draft" key={d.id}><b>{d.title}</b><small>{d.platform} · {d.status}</small><p>{d.body?.slice(0,180)}{(d.body?.length||0)>180?"…":""}</p></div>)}
+    {!contentDrafts.length&&<div className="empty-note">No content drafts yet.</div>}
    </div>
   </section>
   <section className="panel hq-memory hq-memory-executive">
