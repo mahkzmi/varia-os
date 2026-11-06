@@ -487,7 +487,7 @@ Qualification gates (all required):
 Never create a lead solely because a company is well-known in AgTech.
 
 Offer routes are hypotheses only: audit (bounded image assessment), pilot (time-boxed paid evaluation), api_white_label (technical discovery only; do not imply production API/SLA), discovery_pending (need unclear). Never send pricing or claim buying intent.
-Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, buying intent, capabilities, or contact details. Agricultural relevance alone is insufficient. Score conservatively and explain uncertainty. fit_score is research priority, never buyer qualification.
+Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, buying intent, capabilities, or contact details. Agricultural relevance alone is insufficient. Score conservatively and explain uncertainty. Only return candidates with fit_score >= 55; exclude lower scores. fit_score is research priority, never buyer qualification.
 Reject article/directory URLs as company websites. Flag duplicates. Never guess email; contact_email_verified=true only if the exact public address appears in supplied evidence, otherwise false and empty.
 Return strict JSON key 'leads'; fields: company_name, website, country, industry, prospect_type, fit_score, fit_rationale, evidence, recommended_angle, recommended_offer_route, next_action, contact_role, contact_email, contact_email_verified, email_subject, email_body.
 Draft one-to-one outreach only when there is a defensible complementary use case. Never sign as Natasha. Do not claim unproven field results, ROI, herbicide savings, accuracy guarantees, integrations, production readiness, pricing, or delivery commitments.
@@ -682,7 +682,11 @@ async def run_sales_agent(
     for item in result.get("leads", [])[:run_limit]:
         name = str(item.get("company_name", "")).strip()
         prospect_type = str(item.get("prospect_type", "")).strip().lower()
-        if not name or prospect_type not in {"buyer", "integration_partner"}:
+        try:
+            fit_score = int(item.get("fit_score", 0))
+        except (TypeError, ValueError):
+            continue
+        if not name or prospect_type not in {"buyer", "integration_partner"} or fit_score < 55:
             continue
         evidence = item.get("evidence")
         if not isinstance(evidence, list) or not evidence:
@@ -692,8 +696,23 @@ async def run_sales_agent(
             continue
         from urllib.parse import urlparse
         parsed_website = urlparse(website if "://" in website else f"https://{website}")
+        host = parsed_website.netloc.lower().split("@")[-1].split(":")[0]
+        if host.startswith("www."):
+            host = host[4:]
         path_lower = parsed_website.path.lower()
-        if any(part in path_lower for part in ("/blog", "/resources", "/article", "/news", "/insights", "/directory", "/companies/")):
+        directory_hosts = {
+            "cbinsights.com", "crunchbase.com", "pitchbook.com", "tracxn.com",
+            "craft.co", "growjo.com", "owler.com", "zoominfo.com", "theorg.com",
+            "linkedin.com", "wikipedia.org", "yelp.com"
+        }
+        blocked_paths = (
+            "/blog", "/resources", "/article", "/news", "/insights",
+            "/directory", "/company/", "/companies/", "/alternatives",
+            "/competitors", "/listicle"
+        )
+        if (not host or host in directory_hosts
+            or any(host.endswith("." + domain) for domain in directory_hosts)
+            or any(part in path_lower for part in blocked_paths)):
             continue
         existing = (
             db.table("natasha_companies").select("id")
@@ -730,7 +749,7 @@ async def run_sales_agent(
             "stage": "researching",  # AI fit score prioritizes review; only founder evidence can qualify a buyer.
             "currency": "USD",
             "source": "natasha_ai_research",
-            "fit_score": max(0, min(100, int(item.get("fit_score", 0)))),
+            "fit_score": max(0, min(100, fit_score)),
             "fit_rationale": str(item.get("fit_rationale", ""))[:4000],
             "next_action": str(item.get("next_action", "Review research and identify a decision-maker"))[:1000],
             "notes": json.dumps({
@@ -765,7 +784,11 @@ async def run_sales_agent(
         "details": {"product": payload.product, "target_market": payload.target_market,
                     "leads_created": len(created)},
     }).execute()
-    return {"status": "completed", "leads_created": len(created), "leads": created}
+    return {
+        "status": "completed" if created else "no_qualified_candidates",
+        "leads_created": len(created),
+        "leads": created,
+    }
 
 
 # --- Durable background jobs -------------------------------------------------
