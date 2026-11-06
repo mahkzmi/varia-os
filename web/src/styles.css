@@ -13,7 +13,7 @@
 .office-agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:16px}
 .office-agent{padding:18px;min-width:0}.office-agent-top{display:flex;align-items:center;justify-content:space-between}
 .office-agent-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:#263a2b;color:#b7d1b2}
-.agent-state{font-size:8px;letter-spacing:.8px;color:#d8bf83}.agent-state.active{color:#a6d2a7}
+.agent-state{font-size:8px;letter-spacing:.8px;color:#d8bf83}.agent-state.active{color:#a6d2a7}.agent-state.attention{color:#e89b9b}.agent-state.running{color:#e5c57a}.agent-state.queued{color:#a6b6cf}
 .office-agent h3{font:700 14px Manrope,sans-serif;color:#e4ece3;margin:14px 0 3px}
 .office-role{font-size:9px;color:#d3bd82;letter-spacing:.4px}.office-agent p{font-size:10px;color:#8e9e91;line-height:1.65;min-height:50px}
 .office-scope{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0}.office-scope span{font-size:8px;color:#a9b8aa;background:#202e24;border:1px solid var(--line);padding:5px 7px;border-radius:5px;text-transform:capitalize}
