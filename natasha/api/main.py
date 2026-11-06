@@ -516,7 +516,7 @@ async def run_sales_agent(
             "leads_created": 0,
             "leads": [],
         }
-    run_limit = min(run_limit, remaining_daily_quota)
+    run_limit = min(payload.max_companies, remaining_daily_quota)
 
     query = (
         f"companies organizations {payload.target_market} {payload.ideal_customer} "
