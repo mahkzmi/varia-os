@@ -486,7 +486,7 @@ async def send_conversation_message(
                .eq("user_id", user_id).order("created_at", desc=True).limit(14).execute().data or [])
     history.reverse()
     memories = (db.table("office_agent_memories").select("memory_type,content,importance")
-                .eq("user_id", user_id).in_("agent", [agent, "shared"])
+                .eq("user_id", user_id).in_("agent", [agent, "shared", "marketing", "operations"])
                 .order("importance", desc=True).order("updated_at", desc=True).limit(12).execute().data or [])
 
     executive_persona = """You are Natasha, the sole AI employee and executive operating partner of Varia Studio. You combine growth and sales, creative direction, marketing, product strategy, chief-of-staff, and studio operations. Act like a capable founder-side executive: reason independently, make strong recommendations, prioritise, challenge weak assumptions, and turn ambiguity into an executable plan.
