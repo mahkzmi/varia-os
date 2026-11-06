@@ -201,3 +201,141 @@ def create_content(
     if not result.data:
         raise HTTPException(status_code=500, detail="Could not save content draft")
     return result.data[0]
+
+
+# --- Internal execution endpoint (worker-only) -------------------------------
+class OfficeTaskRunRequest(BaseModel):
+    user_id: UUID
+    task: dict
+
+
+@router.post("/internal/run")
+async def run_office_task(
+    request: OfficeTaskRunRequest,
+    x_internal_key: Annotated[str | None, __import__("fastapi").Header(alias="X-Internal-Key")] = None,
+) -> dict:
+    import hmac
+    import json
+    import time
+    import httpx
+
+    expected = settings.supabase_service_role_key
+    if not expected or not x_internal_key or not hmac.compare_digest(x_internal_key, expected):
+        raise HTTPException(status_code=401, detail="Internal worker authentication failed")
+    if not settings.supabase_url:
+        raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    task = request.task
+    user_id = str(request.user_id)
+    agent = task.get("agent")
+    if agent not in {"natasha", "marketing", "operations"}:
+        raise HTTPException(status_code=422, detail="Unsupported agent")
+    db = create_client(settings.supabase_url, expected)
+    started = time.monotonic()
+    run_result = db.table("office_agent_runs").insert({
+        "user_id": user_id, "task_id": task.get("id"), "agent": agent,
+        "model": settings.llm_model, "input_summary": str(task.get("title", ""))[:1000],
+        "status": "running",
+    }).execute()
+    run_id = run_result.data[0]["id"] if run_result.data else None
+
+    try:
+        if agent == "natasha":
+            from .main import AgentRunRequest, run_sales_agent
+            payload = task.get("payload") or {}
+            ideal = str(payload.get("ideal_customer") or task.get("description") or
+                "Agricultural drone and aerial-imagery providers, crop scouting and agronomy services, and AgTech crop-monitoring platforms with an evidenced field-imagery workflow.")
+            sales_request = AgentRunRequest(
+                product=payload.get("product", "Varia Vision"),
+                target_market=payload.get("target_market", "Global"),
+                ideal_customer=ideal[:1200],
+                max_companies=int(payload.get("max_companies", 3)),
+            )
+            output = await run_sales_agent(sales_request, user_id, db)
+        else:
+            if not settings.llm_api_key:
+                raise HTTPException(status_code=503, detail="LLM_API_KEY is not configured")
+            if agent == "marketing":
+                system_prompt = """You are Varia Studio's Marketing Agent. Work only from the supplied task and brand context. Follow the existing personal Instagram strategy for @mahdieh.codes: the founder is the protagonist; the page is not merely a product feed. Brand line: 'Building things & figuring things out.' Voice: Persian-first where appropriate, bilingual selectively, warm, human, conversational, dry understated humour; no corporate/AI clichés, no exaggerated claims, no excessive emojis. Existing Instagram cadence: Monday 20:30 Building Varia (English), Wednesday 20:30 Soil Notes (Persian), Friday 20:30 Founder Diaries / Open Tabs / Off the Clock (Persian), Iran time. Also prepare separate LinkedIn strategy for Varia Studio company page and founder profile when asked. Never publish or send anything. Return strict JSON: summary, deliverable, platform, account_type, title, body, media_brief, approval_request (null unless a specific external action needs founder approval)."""
+            else:
+                system_prompt = """You are Varia Studio's Operations Agent. Prepare proposals, project briefs, reports, delivery plans and Gamma-ready presentation outlines using only the supplied context. Never invent prices, customer names, metrics, team capacity, legal terms, technical capabilities or commitments. Mark missing information explicitly as [NEEDS FOUNDER INPUT]. Use the supplied source document as the only authority when the task identifies one. Never send, sign, publish, negotiate, quote final prices or make commitments. Return strict JSON: summary, deliverable, sections (array), open_questions (array), approval_request (null unless an external commitment is proposed)."""
+            user_payload = {
+                "agent": agent, "task_type": task.get("task_type"),
+                "title": task.get("title"), "description": task.get("description"),
+                "payload": task.get("payload") or {},
+                "autonomy": "limited; internal preparation only; external actions require founder approval",
+            }
+            llm_payload = {
+                "model": settings.llm_model, "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+                ],
+            }
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(
+                    f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                    json=llm_payload,
+                )
+                if response.status_code in (400, 422):
+                    llm_payload.pop("response_format", None)
+                    response = await client.post(
+                        f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+                        headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                        json=llm_payload,
+                    )
+                response.raise_for_status()
+            raw = response.json()["choices"][0]["message"]["content"]
+            if isinstance(raw, list):
+                raw = "".join(part.get("text", "") for part in raw if isinstance(part, dict))
+            fence = chr(96) * 3
+            cleaned = str(raw).strip().replace(fence + "json", "").replace(fence, "").strip()
+            output = json.loads(cleaned)
+
+            if agent == "marketing" and output.get("body"):
+                task_payload = task.get("payload") or {}
+                platform = output.get("platform") if output.get("platform") in {"instagram", "linkedin", "website", "other"} else task_payload.get("platform", "instagram")
+                account_type = output.get("account_type") if output.get("account_type") in {"personal", "company"} else task_payload.get("account_type", "personal")
+                db.table("office_content_drafts").insert({
+                    "user_id": user_id, "agent": "marketing", "platform": platform,
+                    "account_type": account_type, "title": str(output.get("title") or task.get("title"))[:240],
+                    "body": str(output.get("body"))[:20000],
+                    "media_brief": str(output.get("media_brief") or "")[:4000],
+                    "status": "draft", "metadata": {"task_id": task.get("id"), "summary": output.get("summary")},
+                }).execute()
+
+            approval = output.get("approval_request")
+            if isinstance(approval, dict):
+                allowed = {"send_email", "publish_content", "external_message", "pricing", "negotiation", "contract", "financial_commitment", "website_change", "other"}
+                action_type = approval.get("action_type")
+                if action_type in allowed:
+                    db.table("office_approvals").insert({
+                        "user_id": user_id, "task_id": task.get("id"), "agent": agent,
+                        "action_type": action_type,
+                        "title": str(approval.get("title") or "Founder approval required")[:240],
+                        "summary": str(approval.get("summary") or "")[:4000],
+                        "proposed_payload": approval.get("payload") if isinstance(approval.get("payload"), dict) else {},
+                        "status": "pending",
+                    }).execute()
+
+        duration = int((time.monotonic() - started) * 1000)
+        db.table("office_tasks").update({
+            "status": "succeeded", "result": output, "completed_at": datetime.now(timezone.utc).isoformat(),
+            "locked_at": None, "error": None, "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", str(task["id"])).eq("user_id", user_id).execute()
+        if run_id:
+            db.table("office_agent_runs").update({
+                "status": "succeeded", "output": output, "duration_ms": duration,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", run_id).execute()
+        return {"status": "succeeded", "task_id": task["id"], "agent": agent, "result": output}
+    except Exception as exc:
+        duration = int((time.monotonic() - started) * 1000)
+        if run_id:
+            db.table("office_agent_runs").update({
+                "status": "failed", "error": str(exc)[:3000], "duration_ms": duration,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", run_id).execute()
+        raise
