@@ -32,3 +32,10 @@
 .status-text.waiting_approval{color:#e2c37b}.status-text.queued{color:#9bb79e}.status-text.running{color:#8fc8a0}.status-text.failed{color:#df948a}
 @media(max-width:1050px){.office-agents{grid-template-columns:1fr 1fr}.office-metrics{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.office-agents,.office-columns{grid-template-columns:1fr}.office-policy{align-items:flex-start}.policy-chip{display:none}.office-metrics{gap:8px}.office-agent p{min-height:0}}
+
+
+.office-task-row{width:100%;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.office-task-row:hover,.office-task-row.selected{background:#1c2a20}
+.office-task-result{margin-top:12px;padding:13px;border:1px solid #40533d;border-radius:9px;background:#121b15}
+.office-task-result pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;color:#b8c8b8;font:10px/1.65 ui-monospace,SFMono-Regular,monospace;margin:10px 0 0}
+.office-task-error{font-size:9px;color:#df948a;white-space:pre-wrap}
