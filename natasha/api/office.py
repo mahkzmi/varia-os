@@ -352,27 +352,36 @@ Return strict JSON with: summary, deliverable, platform, account_type, title, bo
                 task_payload = task.get("payload") or {}
                 platform = output.get("platform") if output.get("platform") in {"instagram", "linkedin", "website", "other"} else task_payload.get("platform", "instagram")
                 account_type = output.get("account_type") if output.get("account_type") in {"personal", "company"} else task_payload.get("account_type", "personal")
-                db.table("office_content_drafts").insert({
-                    "user_id": user_id, "agent": "marketing", "platform": platform,
-                    "account_type": account_type, "title": str(output.get("title") or task.get("title"))[:240],
-                    "body": str(output.get("body"))[:20000],
-                    "media_brief": str(output.get("media_brief") or "")[:4000],
-                    "status": "draft", "metadata": {"task_id": task.get("id"), "summary": output.get("summary"), "factuality_check": output.get("factuality_check", [])},
-                }).execute()
+                existing_draft = (db.table("office_content_drafts").select("id")
+                    .eq("user_id", user_id)
+                    .filter("metadata->>task_id", "eq", str(task.get("id")))
+                    .limit(1).execute())
+                if not existing_draft.data:
+                    db.table("office_content_drafts").insert({
+                        "user_id": user_id, "agent": "marketing", "platform": platform,
+                        "account_type": account_type, "title": str(output.get("title") or task.get("title"))[:240],
+                        "body": str(output.get("body"))[:20000],
+                        "media_brief": str(output.get("media_brief") or "")[:4000],
+                        "status": "draft", "metadata": {"task_id": task.get("id"), "summary": output.get("summary"), "factuality_check": output.get("factuality_check", [])},
+                    }).execute()
 
             approval = output.get("approval_request")
             if isinstance(approval, dict):
                 allowed = {"send_email", "publish_content", "external_message", "pricing", "negotiation", "contract", "financial_commitment", "website_change", "other"}
                 action_type = approval.get("action_type")
                 if action_type in allowed:
-                    db.table("office_approvals").insert({
-                        "user_id": user_id, "task_id": task.get("id"), "agent": agent,
-                        "action_type": action_type,
-                        "title": str(approval.get("title") or "Founder approval required")[:240],
-                        "summary": str(approval.get("summary") or "")[:4000],
-                        "proposed_payload": approval.get("payload") if isinstance(approval.get("payload"), dict) else {},
-                        "status": "pending",
-                    }).execute()
+                    existing_approval = (db.table("office_approvals").select("id")
+                        .eq("user_id", user_id).eq("task_id", str(task.get("id")))
+                        .eq("action_type", action_type).limit(1).execute())
+                    if not existing_approval.data:
+                        db.table("office_approvals").insert({
+                            "user_id": user_id, "task_id": task.get("id"), "agent": agent,
+                            "action_type": action_type,
+                            "title": str(approval.get("title") or "Founder approval required")[:240],
+                            "summary": str(approval.get("summary") or "")[:4000],
+                            "proposed_payload": approval.get("payload") if isinstance(approval.get("payload"), dict) else {},
+                            "status": "pending",
+                        }).execute()
 
         duration = int((time.monotonic() - started) * 1000)
         db.table("office_tasks").update({
