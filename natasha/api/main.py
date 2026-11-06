@@ -143,6 +143,7 @@ class LeadCreate(BaseModel):
     company_id: UUID | None = None
     primary_contact_id: UUID | None = None
     stage: str = Field(default="new", pattern=r"^(new|researching|qualified|contacted|replied|meeting|proposal|pilot|won|disqualified|lost)$")
+    offer_route: str = Field(default="discovery_pending", pattern=r"^(audit|pilot|api_white_label|discovery_pending)$")
     source: str | None = None
     estimated_value: float | None = Field(default=None, ge=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
@@ -154,6 +155,7 @@ class LeadCreate(BaseModel):
 class LeadUpdate(BaseModel):
     product: str | None = Field(default=None, pattern=r"^(Varia Carbon|Varia Vision|Varia Trait-Bridge|Other)$")
     stage: str | None = Field(default=None, pattern=r"^(new|researching|qualified|contacted|replied|meeting|proposal|pilot|won|disqualified|lost)$")
+    offer_route: str | None = Field(default=None, pattern=r"^(audit|pilot|api_white_label|discovery_pending)$")
     source: str | None = None
     fit_score: int | None = Field(default=None, ge=0, le=100)
     fit_rationale: str | None = None
@@ -689,6 +691,7 @@ async def run_sales_agent(
 
         lead_result = db.table("natasha_leads").insert({
             "user_id": user_id, "company_id": company_id, "product": payload.product,
+            "offer_route": item.get("recommended_offer_route") if item.get("recommended_offer_route") in {"audit", "pilot", "api_white_label", "discovery_pending"} else "discovery_pending",
             "stage": "researching",  # AI fit score prioritizes review; only founder evidence can qualify a buyer.
             "currency": "USD",
             "source": "natasha_ai_research",
