@@ -36,29 +36,13 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
   try{setMemories(await call("/api/office/memories",token));}
   catch(e){setError(e instanceof Error?e.message:"Could not load founder context");}
  }
- async function loadGmailStatus(){
-  try{setGmailStatus(await call("/api/office/gmail/status",token));}
-  catch(e){setError(e instanceof Error?e.message:"Could not load Gmail connection");}
- }
- async function connectGmail(){
-  setGmailBusy(true);setError("");
-  try{const result=await call("/api/office/gmail/connect",token,{});window.location.assign(result.authorization_url);}
-  catch(e){setError(e instanceof Error?e.message:"Could not start Gmail connection");setGmailBusy(false);}
- }
- async function sendGmailTest(){
-  setGmailBusy(true);setError("");
-  try{const result=await call("/api/office/gmail/test",token,{});notify("Gmail self-test sent to "+result.to);}
-  catch(e){setError(e instanceof Error?e.message:"Gmail self-test failed");}
-  finally{setGmailBusy(false);}
- }
  async function loadStudioWork(){
   try{
    const [t,a,d,o]=await Promise.all([call("/api/office/tasks",token),call("/api/office/approvals",token),call("/api/office/content",token),call("/api/office/overview",token)]);
    setTasks(t);setApprovals(a);setContentDrafts(d);setOfficeOverview(o);
   }catch(e){setError(e instanceof Error?e.message:"Could not load studio work");}
  }
- useEffect(()=>{loadConversations();loadMemories();loadStudioWork();loadGmailStatus();},[token]);
- useEffect(()=>{if(new URLSearchParams(window.location.search).has("gmail")){loadGmailStatus();window.history.replaceState({},document.title,window.location.pathname);}},[token]);
+ useEffect(()=>{loadConversations();loadMemories();loadStudioWork();},[token]);
  useEffect(()=>{
   if(!activeConversation?.id){setMessages([]);return;}
   let alive=true;
@@ -144,14 +128,13 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
    <div className="panel-head"><div><span className="eyebrow">AUTONOMY · OPERATING CONTROL</span><h3>Natasha is configured to operate independently.</h3><p>Internal work runs around the clock. External actions remain channel- and policy-gated.</p></div><ShieldCheck/></div>
    <div className="hq-task"><span className="hq-task-dot"/><div><b>High autonomy · {officeOverview.active_hours||"24/7"}</b><small>Maximum {officeOverview.max_initial_messages_per_day??15} first-touch messages per day · only through a connected permitted channel</small></div></div>
    <div className="hq-task"><span className="hq-task-dot"/><div><b>{officeOverview.sales_qualified_leads??0} qualified · {officeOverview.sales_won_leads??0} won</b><small>{officeOverview.sales_open_leads??0} open sales leads · unpriced leads are not counted as revenue</small></div></div>
-   <div className="hq-task"><span className="hq-task-dot"/><div><b>Outbound and publishing status</b><small>Not connected: external messages and social publishing are blocked until an approved account integration is connected.</small></div></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>Outbound and publishing status</b><small>Manual outreach mode: copy a prepared message, send it on the company platform, then mark it sent in Drafts. No mailbox integration or paid email service is required.</small></div></div>
    {(()=>{const cycle=tasks.find((t:any)=>t.task_type==="autonomous_cycle"&&!String(t.title||"").toLowerCase().includes("acceptance test"));return <div className="hq-task"><span className="hq-task-dot"/><div><b>Latest daily operating report · {cycle?.status||"not run"}</b><small>{cycle?.completed_at?new Date(cycle.completed_at).toLocaleString():cycle?.created_at?new Date(cycle.created_at).toLocaleString():"No report recorded yet"}</small>{cycle?.result?.summary&&<p>{cycle.result.summary}</p>}</div></div>;})()}
   </section>
   <section className="panel hq-queue-panel">
-   <div className="panel-head"><div><span className="eyebrow">CONNECTED CHANNEL · GMAIL</span><h3>{gmailStatus.connected?"Gmail connected":"Connect Natasha’s email"}</h3><p>{gmailStatus.connected?gmailStatus.email:"Authorize Varia OS to send email from your selected Google account."}</p></div><ShieldCheck/></div>
-   {!gmailStatus.connected?<button className="primary-btn" onClick={connectGmail} disabled={gmailBusy||!gmailStatus.configured}>{gmailBusy?"Opening Google…":"Connect Gmail"}</button>:
-    <div className="hq-task"><span className="hq-task-dot"/><div><b>Google account connected</b><small>External prospect sending remains locked. First run the founder-only self-test.</small><button className="secondary-btn" onClick={sendGmailTest} disabled={gmailBusy}>{gmailBusy?"Sending…":"Send test to my connected inbox"}</button></div></div>}
-   {!gmailStatus.configured&&<small>Google OAuth credentials still need to be added to the API service in Render.</small>}
+   <div className="panel-head"><div><span className="eyebrow">OUTBOUND · MANUAL MODE</span><h3>Founder-led outreach</h3><p>Natasha researches the account and prepares platform-specific messages. You keep control of the actual send.</p></div><ShieldCheck/></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>Ready to copy and send</b><small>Email · LinkedIn · company website/contact form. Each draft keeps its destination and research sources.</small></div></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>Close the loop after sending</b><small>Use “I sent it” in Drafts to update the CRM and record the outreach against the lead.</small></div></div>
   </section>
   <section className="hq-work-grid hq-work-grid-single">
    <div className="panel hq-queue-panel">
