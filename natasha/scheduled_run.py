@@ -19,9 +19,14 @@ USER_ID = os.environ["NATASHA_USER_ID"]
 PRODUCT = "Varia Vision"
 TARGET_MARKET = "Global"
 IDEAL_CUSTOMER = (
-    "AgTech companies, drone service providers, crop monitoring platforms, "
-    "and agricultural technology providers that could use weed detection, "
-    "crop classification, or field-image computer vision."
+    "Prioritize agricultural drone/aerial-imagery providers, crop-scouting and "
+    "agronomy service businesses using field imagery. Secondarily identify "
+    "AgTech/crop-monitoring platforms with evidenced imagery workflows and "
+    "plausible integration gaps, then agricultural equipment/robotics/precision-"
+    "weeding businesses where complementary integration is credible. Exclude "
+    "generic AI vendors, annotation platforms, directories, investors, research "
+    "institutions, and direct competitors unless evidence shows a specific buyer "
+    "need or credible partnership path. A high fit score is not qualification."
 )
 MAX_COMPANIES = 5
 DRAIN_WINDOW_SECONDS = max(60, int(os.getenv("DRAIN_WINDOW_SECONDS", "600")))
