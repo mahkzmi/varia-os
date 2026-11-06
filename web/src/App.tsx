@@ -198,12 +198,31 @@ function PageHeading({eyebrow,title,subtitle,action}:{eyebrow:string;title:strin
 function Overview({stats,data,companyMap,setSection,loading}:any) {
   const latest = [...data.leads].slice(0,5);
   const pending = data.drafts.filter((x:AnyRow)=>x.status==="draft").slice(0,3);
-  return <><PageHeading eyebrow={`${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"2-digit"}).toUpperCase()} · STUDIO SNAPSHOT`} title="Good work starts with clarity." subtitle="Your studio, your pipeline, and the next move — all in one place." action={<button className="secondary-btn" onClick={()=>setSection("Natasha")}><Sparkles size={16}/> Ask Natasha</button>}/>
-    <div className="hero-panel"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot"/> YOUR STUDIO AT A GLANCE</div><h2>Build deliberately.<br/><em>Grow intelligently.</em></h2><p>Small, focused moves compound. Here’s where Varia stands today.</p><button className="hero-link" onClick={()=>setSection("Natasha")}>Launch a research mission <ArrowUpRight size={16}/></button></div><div className="hero-art"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="orbit-core"><Sprout size={42}/></div><span className="orbit-tag tag-one">SOIL INTELLIGENCE</span><span className="orbit-tag tag-two">COMPUTER VISION</span><span className="orbit-tag tag-three">DECISION SUPPORT</span></div></div>
-    <div className="metric-grid"><Metric icon={Target} label="Active leads" value={stats.leads} note={`${stats.qualified} qualified opportunities`} accent="green"/><Metric icon={Building2} label="Companies tracked" value={stats.companies} note="Across your target markets"/><Metric icon={MessageSquareText} label="Drafts to review" value={stats.drafts} note="Human approval required" accent="gold"/><Metric icon={TrendingUp} label="Pipeline value" value={money(stats.pipeline)} note="Estimated opportunity value"/></div>
-    <div className="section-grid"><section className="panel"><div className="panel-head"><div><h3>Recent pipeline</h3><p>Your latest opportunities</p></div><button className="quiet-link" onClick={()=>setSection("Pipeline")}>View all <ArrowUpRight size={14}/></button></div>{loading?<Skeleton/>:latest.length?latest.map((lead:AnyRow)=><div className="list-row" key={lead.id}><div className="row-avatar">{initials(companyMap[lead.company_id]?.name || lead.product)}</div><div className="row-main"><strong>{companyMap[lead.company_id]?.name || lead.product}</strong><small>{lead.product} · {dateLabel(lead.created_at)}</small></div><Stage stage={lead.stage}/></div>):<Empty title="No leads yet" body="Start by asking Natasha to research your next market." action={()=>setSection("Natasha")}/>}</section>
-      <section className="panel"><div className="panel-head"><div><h3>Needs your attention</h3><p>Human decisions, not autopilot</p></div><span className="small-count">{pending.length} pending</span></div>{pending.length?pending.map((draft:AnyRow)=><div className="attention-row" key={draft.id}><div className="attention-icon"><Mail size={17}/></div><div className="row-main"><strong>{draft.subject || "Outreach draft"}</strong><small>{draft.recipient || "Recipient not verified"}</small></div><button className="round-arrow" onClick={()=>setSection("Drafts")}><ArrowUpRight size={16}/></button></div>):<div className="empty-note"><ShieldCheck size={22}/><span>All caught up. New drafts will appear here for your review.</span></div>}</section></div>
-    <div className="bottom-note"><div className="note-icon"><Leaf size={18}/></div><div><strong>From Iran · For the world</strong><span>Independent AI tools for modern agriculture. Soil intelligence, computer vision, and decision support.</span></div><span className="note-tag">VARIA STUDIO</span></div>
+  const due = data.followUps.filter((x:AnyRow)=>x.status!=="completed").slice(0,3);
+  return <>
+    <PageHeading eyebrow="VARIA STUDIO · OVERVIEW" title="Your studio, at a glance." subtitle="The few numbers and decisions that matter right now." action={<button className="primary-btn" onClick={()=>setSection("Natasha")}><Sparkles size={16}/> Open Natasha</button>}/>
+    <div className="overview-summary">
+      <div><span className="live-dot"/><strong>Founder workspace</strong><small>Private · Varia Studio</small></div>
+      <span>One focused workspace for sales, research and execution.</span>
+    </div>
+    <div className="metric-grid">
+      <Metric icon={Target} label="Leads" value={stats.leads} note={`${stats.qualified} qualified opportunities`}/>
+      <Metric icon={Building2} label="Companies" value={stats.companies} note="In your CRM"/>
+      <Metric icon={MessageSquareText} label="Drafts to review" value={stats.drafts} note="Nothing sends without approval" accent="gold"/>
+      <Metric icon={TrendingUp} label="Pipeline value" value={money(stats.pipeline)} note="Estimated opportunity value"/>
+    </div>
+    <div className="section-grid">
+      <section className="panel">
+        <div className="panel-head"><div><h3>Recent opportunities</h3><p>Your latest leads and their current stage</p></div><button className="quiet-link" onClick={()=>setSection("Pipeline")}>View pipeline <ArrowUpRight size={14}/></button></div>
+        {loading?<Skeleton/>:latest.length?latest.map((lead:AnyRow)=><div className="list-row" key={lead.id}><div className="row-avatar">{initials(companyMap[lead.company_id]?.name || lead.product)}</div><div className="row-main"><strong>{companyMap[lead.company_id]?.name || lead.product}</strong><small>{lead.product} · {dateLabel(lead.created_at)}</small></div><Stage stage={lead.stage}/></div>):<Empty title="No leads yet" body="Ask Natasha to research a focused list of potential customers." action={()=>setSection("Natasha")}/>}
+      </section>
+      <section className="panel">
+        <div className="panel-head"><div><h3>Needs your attention</h3><p>Only actions that need a founder decision</p></div><span className="small-count">{pending.length} drafts</span></div>
+        {pending.length?pending.map((draft:AnyRow)=><div className="attention-row" key={draft.id}><div className="attention-icon"><Mail size={17}/></div><div className="row-main"><strong>{draft.subject || "Outreach draft"}</strong><small>{draft.recipient || "Recipient not verified"}</small></div><button className="round-arrow" onClick={()=>setSection("Drafts")}><ArrowUpRight size={16}/></button></div>):<div className="empty-note"><ShieldCheck size={22}/><span>No drafts waiting for review.</span></div>}
+        {due.length>0&&<div className="overview-followups"><strong>Upcoming follow-ups</strong>{due.map((item:AnyRow)=><div key={item.id}><span>{item.title}</span><small>{dateLabel(item.due_at)}</small></div>)}</div>}
+      </section>
+    </div>
+    <div className="bottom-note"><div className="note-icon"><Leaf size={18}/></div><div><strong>From Iran · For the world</strong><span>Independent AI tools for modern agriculture.</span></div><button className="quiet-link" onClick={()=>setSection("Natasha")}>Work with Natasha <ArrowUpRight size={14}/></button></div>
   </>;
 }
 function Metric({icon:Icon,label,value,note,accent}:any){return <div className="metric-card"><div className="metric-top"><span>{label}</span><div className={`metric-icon ${accent||""}`}><Icon size={17}/></div></div><strong>{value}</strong><small>{note}</small></div>}
