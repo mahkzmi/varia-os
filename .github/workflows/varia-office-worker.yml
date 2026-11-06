@@ -1,6 +1,10 @@
 name: Varia AI Office Worker
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/varia-office-worker.yml"
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
