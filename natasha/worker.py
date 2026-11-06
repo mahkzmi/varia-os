@@ -19,6 +19,7 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 NATASHA_API_URL = os.getenv("NATASHA_API_URL", "https://natasha-api.onrender.com").rstrip("/")
 POLL_SECONDS = max(2, int(os.getenv("POLL_SECONDS", "5")))
+ONE_SHOT = os.getenv("WORKER_ONESHOT", "0").lower() in {"1", "true", "yes"}
 _shutdown = False
 
 
@@ -122,13 +123,13 @@ def main() -> None:
                 job = claim_one(db)
                 if job:
                     process_job(db, job, client)
-                    continue
                 office_task = claim_office_one(db)
                 if office_task:
                     process_office_task(db, office_task, client)
-                    continue
             except Exception:
                 logger.exception("Worker polling cycle failed")
+            if ONE_SHOT:
+                break
             for _ in range(POLL_SECONDS):
                 if _shutdown:
                     break
