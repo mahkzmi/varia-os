@@ -1,0 +1,39 @@
+name: Varia AI Office Worker
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: varia-office-worker
+  cancel-in-progress: false
+
+jobs:
+  process-queued-work:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout agent runtime
+        uses: actions/checkout@v4
+        with:
+          ref: feat/natasha-sales-engine
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: natasha/api/requirements.txt
+
+      - name: Install runtime dependencies
+        run: pip install -r natasha/api/requirements.txt
+
+      - name: Process queued Natasha and Office tasks
+        env:
+          SUPABASE_URL: https://gjnsyufdrgohthuxnqzf.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NATASHA_API_URL: https://natasha-api.onrender.com
+          WORKER_ONESHOT: "1"
+          LOG_LEVEL: INFO
+        run: python -m natasha.worker
