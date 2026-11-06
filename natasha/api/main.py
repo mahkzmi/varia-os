@@ -874,6 +874,98 @@ async def internal_agent_run(
     return await run_sales_agent(request.payload, str(request.user_id), service_db)
 
 
+@app.post("/internal/worker/tick")
+async def internal_worker_tick(
+    x_worker_key: Annotated[str | None, Header(alias="X-Worker-Key")] = None,
+) -> dict:
+    """Run one Office task and one Natasha job using server-side service credentials."""
+    import hmac
+
+    expected_worker_key = settings.worker_api_key
+    service_key = settings.supabase_service_role_key
+    if not expected_worker_key or not x_worker_key or not hmac.compare_digest(x_worker_key, expected_worker_key):
+        raise HTTPException(status_code=401, detail="Worker authentication failed")
+    if not settings.supabase_url or not service_key:
+        raise HTTPException(status_code=503, detail="Supabase service configuration is missing")
+
+    service_db = create_client(settings.supabase_url, service_key)
+    now = datetime.now(timezone.utc)
+    output: dict = {"office_task": None, "natasha_job": None}
+
+    # Process Office first so long-running web research cannot block founder-facing work.
+    office_rows = service_db.rpc("office_claim_tasks", {"p_limit": 1}).execute().data or []
+    if office_rows:
+        task = office_rows[0]
+        task_id = str(task["id"])
+        try:
+            from .office import OfficeTaskRunRequest, run_office_task
+            result = await run_office_task(
+                OfficeTaskRunRequest(user_id=UUID(str(task["user_id"])), task=task),
+                x_internal_key=service_key,
+            )
+            service_db.table("office_tasks").update({
+                "status": "succeeded",
+                "locked_at": None,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "result": result,
+                "error": None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", task_id).execute()
+            output["office_task"] = {"id": task_id, "status": "succeeded"}
+        except Exception as exc:
+            attempts = int(task.get("attempts") or 1)
+            max_attempts = int(task.get("max_attempts") or 5)
+            error_text = str(getattr(exc, "detail", exc))[:3000]
+            transient = any(token in error_text.lower() for token in ("502", "503", "429", "timeout", "temporarily unavailable"))
+            delay = min(900, (60 if transient else 15) * (2 ** max(0, attempts - 1)))
+            next_status = "queued" if attempts < max_attempts else "failed"
+            service_db.table("office_tasks").update({
+                "status": next_status,
+                "locked_at": None,
+                "error": error_text,
+                "run_at": (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", task_id).execute()
+            output["office_task"] = {"id": task_id, "status": next_status, "error": error_text[:300]}
+
+    # Then process one Natasha research job.
+    jobs = service_db.rpc("natasha_claim_jobs", {"p_limit": 1}).execute().data or []
+    if jobs:
+        job = jobs[0]
+        job_id = str(job["id"])
+        try:
+            payload = AgentRunRequest(**(job.get("payload") or {}))
+            result = await run_sales_agent(payload, str(job["user_id"]), service_db)
+            service_db.table("natasha_jobs").update({
+                "status": "succeeded",
+                "locked_at": None,
+                "last_error": None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", job_id).execute()
+            output["natasha_job"] = {
+                "id": job_id,
+                "status": "succeeded",
+                "leads_created": int(result.get("leads_created", 0)),
+            }
+        except Exception as exc:
+            attempts = int(job.get("attempts") or 1)
+            max_attempts = int(job.get("max_attempts") or 5)
+            error_text = str(getattr(exc, "detail", exc))[:3000]
+            transient = any(token in error_text.lower() for token in ("502", "503", "429", "timeout", "temporarily unavailable"))
+            delay = min(900, (60 if transient else 15) * (2 ** max(0, attempts - 1)))
+            next_status = "queued" if attempts < max_attempts else "failed"
+            service_db.table("natasha_jobs").update({
+                "status": next_status,
+                "locked_at": None,
+                "last_error": error_text,
+                "run_at": (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", job_id).execute()
+            output["natasha_job"] = {"id": job_id, "status": next_status, "error": error_text[:300]}
+
+    return output
+
+
 # Varia AI Office shared workspace API
 from .office import router as office_router
 app.include_router(office_router)
