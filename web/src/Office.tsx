@@ -15,11 +15,11 @@ async function api(path:string, token:string, init:RequestInit={}) {
   return data;
 }
 const date = (s:string) => new Date(s).toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
-const names:Record<string,string>={natasha:"Natasha",marketing:"Marketing Agent",operations:"Operations Agent"};
+const names:Record<string,string>={natasha:"Natasha",marketing:"Tony",operations:"Edith"};
 const descriptions:Record<string,string>={
  natasha:"Finds target accounts, researches evidence, scores fit and prepares founder-reviewed outreach.",
- marketing:"Works from the approved brand strategy to prepare Instagram, LinkedIn and website content.",
- operations:"Turns project context into proposals, briefs, operating reports and delivery checklists."
+ marketing:"Tony · Creative Lead. Develops brand-led content and campaigns with sharp creative judgment.",
+ operations:"Edith · Chief of Staff. Keeps priorities, projects, decisions and delivery under control."
 };
 
 export default function Office({token,notify}:{token:string;notify:(message:string)=>void}) {
@@ -83,7 +83,7 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
   <div className="office-columns">
    <section className="panel office-task-panel"><div className="panel-head"><div><h3>Assign work</h3><p>Add a task to the shared queue.</p></div><Sparkles size={18}/></div>
     <form onSubmit={queueTask}>
-     <label>Agent</label><select value={agent} onChange={e=>{setAgent(e.target.value);setTaskType(e.target.value==="natasha"?"research":e.target.value==="marketing"?"content_draft":"proposal");}}><option value="natasha">Natasha · Growth & Sales</option><option value="marketing">Marketing Agent · Brand & Content</option><option value="operations">Operations Agent · Studio Ops</option></select>
+     <label>Agent</label><select value={agent} onChange={e=>{setAgent(e.target.value);setTaskType(e.target.value==="natasha"?"research":e.target.value==="marketing"?"content_draft":"proposal");}}><option value="natasha">Natasha · Growth & Sales</option><option value="marketing">Tony · Creative & Marketing</option><option value="operations">Edith · Chief of Staff</option></select>
      <label>Task type</label><select value={taskType} onChange={e=>setTaskType(e.target.value)}>{(agent==="natasha"?[["research","Market research"],["lead_review","Review existing leads"],["outreach_draft","Prepare outreach draft"]]:agent==="marketing"?[["content_draft","Create content draft"],["linkedin_plan","LinkedIn planning"],["website_review","Website review"]]:[["proposal","Prepare proposal"],["project_brief","Project brief"],["operations_report","Operations report"]]).map(([v,l])=><option value={v} key={v}>{l}</option>)}</select>
      <label>Task title</label><input id="office-task-title" value={title} onChange={e=>setTitle(e.target.value)} placeholder="What needs to get done?" required/>
      <label>Context / instructions</label><textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Add the outcome, source material or constraints…" rows={4}/>
