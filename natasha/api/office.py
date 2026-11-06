@@ -86,6 +86,19 @@ def office_overview(
         result = query.limit(1).execute()
         return int(result.count or 0)
 
+    lead_rows = (db.table("natasha_leads")
+        .select("stage,estimated_value,currency")
+        .eq("user_id", user_id).execute().data or [])
+    closed_stages = {"won", "lost", "disqualified"}
+    qualified_stages = {"qualified", "contacted", "replied", "meeting", "proposal", "pilot"}
+    open_rows = [row for row in lead_rows if row.get("stage") not in closed_stages]
+    pipeline_by_currency: dict[str, float] = {}
+    for row in open_rows:
+        amount = row.get("estimated_value")
+        currency = str(row.get("currency") or "USD").upper()
+        if amount is not None:
+            pipeline_by_currency[currency] = pipeline_by_currency.get(currency, 0.0) + float(amount)
+
     return {
         "tasks": count("office_tasks"),
         "queued_tasks": count("office_tasks", value="queued"),
@@ -95,6 +108,12 @@ def office_overview(
         "agents": 3,
         "autonomy_level": "limited",
         "email_provider": "gmail",
+        "sales_leads_total": len(lead_rows),
+        "sales_qualified_leads": sum(1 for row in lead_rows if row.get("stage") in qualified_stages),
+        "sales_open_leads": len(open_rows),
+        "sales_unpriced_open_leads": sum(1 for row in open_rows if row.get("estimated_value") is None),
+        "sales_won_leads": sum(1 for row in lead_rows if row.get("stage") == "won"),
+        "sales_pipeline_value_by_currency": pipeline_by_currency,
     }
 
 
