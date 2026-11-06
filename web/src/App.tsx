@@ -47,7 +47,7 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
-  const [mission, setMission] = useState({ product: "Varia Vision", target_market: "Netherlands", ideal_customer: "Agricultural technology companies, crop consultants, and precision-agriculture providers that use drone or field imagery and may need crop/weed detection.", max_companies: 5 });
+  const [mission, setMission] = useState({ product: "Varia Vision", target_market: "Global", ideal_customer: "Agricultural drone and aerial-imagery service providers; crop-monitoring and precision-agriculture companies; agronomy and crop-consulting businesses using field imagery; and AgTech software vendors that may integrate crop/weed computer vision. Prioritize organizations with an evidenced agricultural imagery workflow and a plausible commercial use case. Do not assume buyer intent.", max_companies: 3 });
   const [missionBusy, setMissionBusy] = useState(false);
   const [companyForm, setCompanyForm] = useState({name:"",website:"",industry:"",country:"",notes:""});
   const [leadForm, setLeadForm] = useState({product:"Varia Vision",stage:"new",source:"manual",notes:"",next_action:""});
