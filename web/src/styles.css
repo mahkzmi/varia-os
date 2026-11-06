@@ -39,3 +39,23 @@
 .office-task-result{margin-top:12px;padding:13px;border:1px solid #40533d;border-radius:9px;background:#121b15}
 .office-task-result pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;color:#b8c8b8;font:10px/1.65 ui-monospace,SFMono-Regular,monospace;margin:10px 0 0}
 .office-task-error{font-size:9px;color:#df948a;white-space:pre-wrap}
+
+
+/* UX polish: readable hierarchy, honest states, responsive workspace */
+.sidebar{overflow-y:auto;overscroll-behavior:contain}
+.office-page{min-width:0}
+.office-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.office-metrics .metric-card{min-width:0}
+.office-footnote{flex-wrap:wrap}
+.office-task-row{gap:10px;padding:12px 10px;border-radius:8px}
+.office-task-row .row-main{min-width:0}
+.office-task-row .row-main strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.office-task-row .status-text{white-space:nowrap}
+.task-result-summary{font-size:12px;line-height:1.7;color:#d6e1d5;margin:12px 0}
+.task-result-deliverable{font-size:11px;line-height:1.8;color:#d5dfd4;white-space:pre-wrap;overflow-wrap:anywhere;padding:13px;border:1px solid var(--line);border-radius:8px;background:#17231a}
+.task-result-raw{margin-top:12px;color:#9aaa9b;font-size:10px}
+.task-result-raw summary{cursor:pointer;padding:7px 0}
+.office-policy>div span{display:block}
+@media(max-width:1050px){.office-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.office-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.office-task-row{align-items:flex-start}.office-task-row .status-text{font-size:8px}.approval-card{flex-direction:column}.approval-actions{justify-content:flex-start}.office-policy{gap:9px}.office-task-result{min-width:0}}
+@media(max-width:380px){.office-metrics{grid-template-columns:1fr 1fr}.office-metrics .metric-card{padding:11px}.office-metrics .metric-card strong{font-size:20px}}
