@@ -1,5 +1,5 @@
 name: Varia AI Office Worker
-# Free GitHub Actions runner drains the Supabase queues; no paid Render cron is used.
+# Free GitHub Actions runner drains Supabase queues and starts Natasha's daily planner; no paid Render cron is used.
 
 on:
   push:
