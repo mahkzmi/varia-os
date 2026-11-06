@@ -320,7 +320,8 @@ OUTPUT:
 Return strict JSON. Always include summary, deliverable, sections, open_questions, factuality_check, and approval_request.
 For task_type content_draft, also include platform, account_type, title, body and media_brief. Keep all copy fact-checked and ready for founder review.
 For project_brief or operational tasks, make the deliverable structured, actionable and explicit about owners, dependencies, acceptance criteria and risks where evidence supports them.
-For sales and market tasks, distinguish sourced evidence from fit hypotheses and never fabricate sources or contacts."""
+For sales and market tasks, distinguish sourced evidence from fit hypotheses and never fabricate sources or contacts.
+For task_type autonomous_cycle, review the supplied Varia state and return a concise daily operating plan plus a top-level next_tasks array of at most 4 executable tasks. Each task must contain task_type (one of research, lead_research, sales_research, content_draft, project_brief, operations), title, description, payload object and priority 1-5. Prefer evidence-backed Varia Vision prospect research, then sales follow-up preparation, pilot-readiness work and founder-brand content. Never queue an external send or publish action. If there is insufficient evidence, create a research task rather than asserting conclusions."""
             user_payload = {
                 "agent": agent, "task_type": task.get("task_type"),
                 "title": task.get("title"), "description": task.get("description"),
