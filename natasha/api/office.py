@@ -365,6 +365,37 @@ For sales and market tasks, distinguish sourced evidence from fit hypotheses and
             cleaned = str(raw).strip().replace(fence + "json", "").replace(fence, "").strip()
             output = json.loads(cleaned)
 
+            if agent == "natasha" and task.get("task_type") == "autonomous_cycle":
+                allowed_child_types = {"research", "lead_research", "sales_research", "content_draft", "project_brief", "operations"}
+                child_tasks = output.get("next_tasks") if isinstance(output.get("next_tasks"), list) else []
+                created_children = []
+                for index, child in enumerate(child_tasks[:4]):
+                    if not isinstance(child, dict):
+                        continue
+                    child_type = str(child.get("task_type") or "").strip()
+                    child_title = str(child.get("title") or "").strip()
+                    if child_type not in allowed_child_types or len(child_title) < 3:
+                        continue
+                    child_key = f"natasha-cycle:{task.get('id')}:{index}:{child_type}"
+                    existing_child = (db.table("office_tasks").select("id")
+                        .eq("user_id", user_id).eq("idempotency_key", child_key)
+                        .limit(1).execute())
+                    if existing_child.data:
+                        continue
+                    child_row = {
+                        "user_id": user_id, "agent": "natasha", "task_type": child_type,
+                        "title": child_title[:240],
+                        "description": str(child.get("description") or "")[:6000],
+                        "payload": child.get("payload") if isinstance(child.get("payload"), dict) else {},
+                        "priority": max(1, min(5, int(child.get("priority", 3)))),
+                        "status": "queued", "idempotency_key": child_key,
+                    }
+                    created = db.table("office_tasks").insert(child_row).execute()
+                    if created.data:
+                        created_children.append(str(created.data[0].get("id")))
+                output["child_tasks_queued"] = len(created_children)
+                output["child_task_ids"] = created_children
+
             if agent == "natasha" and task.get("task_type") == "content_draft" and output.get("body"):
                 task_payload = task.get("payload") or {}
                 platform = output.get("platform") if output.get("platform") in {"instagram", "linkedin", "website", "other"} else task_payload.get("platform", "instagram")
@@ -372,7 +403,8 @@ For sales and market tasks, distinguish sourced evidence from fit hypotheses and
                 existing_draft = (db.table("office_content_drafts").select("id")
                     .eq("user_id", user_id)
                     .filter("metadata->>task_id", "eq", str(task.get("id")))
-                    .limit(1).execute())                if not existing_draft.data:
+                    .limit(1).execute())
+                if not existing_draft.data:
                     db.table("office_content_drafts").insert({
                         "user_id": user_id, "agent": "natasha", "platform": platform,
                         "account_type": account_type, "title": str(output.get("title") or task.get("title"))[:240],
