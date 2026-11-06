@@ -109,6 +109,8 @@ def office_overview(
         if amount is not None:
             pipeline_by_currency[currency] = pipeline_by_currency.get(currency, 0.0) + float(amount)
 
+    office_config = (db.table("office_settings").select("autonomy_level,agent_configs,approval_required_actions")
+        .eq("user_id", user_id).limit(1).execute().data or [{}])[0]
     return {
         "tasks": count("office_tasks"),
         "queued_tasks": count("office_tasks", value="queued"),
@@ -116,7 +118,9 @@ def office_overview(
         "pending_approvals": count("office_approvals", value="pending"),
         "content_drafts": count("office_content_drafts", value="draft"),
         "agents": 1,
-        "autonomy_level": "limited",
+        "autonomy_level": office_config.get("autonomy_level", "limited"),
+        "max_initial_messages_per_day": ((office_config.get("agent_configs") or {}).get("natasha") or {}).get("max_initial_messages_per_day", 0),
+        "active_hours": ((office_config.get("agent_configs") or {}).get("natasha") or {}).get("active_hours", "business_hours"),
         "email_provider": "gmail",
         "sales_leads_total": len(lead_rows),
         "sales_qualified_leads": sum(1 for row in lead_rows if row.get("stage") in qualified_stages),
@@ -177,8 +181,7 @@ def review_approval(
     payload: ApprovalReview,
     user_id: Annotated[str, Depends(current_user_id)],
     db: Annotated[Client, Depends(get_db)],
-) -> dict:
-    existing = (db.table("office_approvals").select("id,status").eq("id", str(approval_id))
+) -> dict:    existing = (db.table("office_approvals").select("id,status").eq("id", str(approval_id))
                 .eq("user_id", user_id).limit(1).execute())
     if not existing.data:
         raise HTTPException(status_code=404, detail="Approval not found")
@@ -201,10 +204,20 @@ def get_office_settings(
     if result.data:
         return result.data[0]
     created = db.table("office_settings").insert({
-        "user_id": user_id, "email_provider": "gmail", "autonomy_level": "limited"
+        "user_id": user_id, "email_provider": "gmail", "autonomy_level": "high",
+        "approval_required_actions": ["pricing", "negotiation", "contract", "financial_commitment", "website_change"],
+        "agent_configs": {
+            "natasha": {"enabled": True, "autonomy_level": "high", "max_initial_messages_per_day": 15,
+                "active_hours": "24/7", "internal_research": True, "lead_qualification": True,
+                "content_drafting": True, "routine_operations": True,
+                "external_messaging_authorized": True, "external_messaging_requires_connected_channel": True,
+                "respect_recipient_business_hours": True, "require_evidence_and_audit_log": True},
+            "marketing": {"enabled": False, "merged_into": "natasha"},
+            "operations": {"enabled": False, "merged_into": "natasha"}
+        }
     }).execute()
     return created.data[0] if created.data else {
-        "user_id": user_id, "email_provider": "gmail", "autonomy_level": "limited"
+        "user_id": user_id, "email_provider": "gmail", "autonomy_level": "high"
     }
 
 
@@ -299,7 +312,9 @@ FACTUALITY:
 - Varia Trait-Bridge is a product name only; capabilities are not specified.
 - Founder brand: @mahdieh.codes; 'Building things & figuring things out.' Warm, conversational, Persian-first where appropriate, with dry understated humour.
 - Do not claim current external research unless sources are supplied or an actual research tool was used.
-- Never send emails, publish posts, sign documents, negotiate, quote final prices, or make financial commitments. Prepare drafts and flag founder approval.
+- Operate with HIGH autonomy for internal research, lead qualification, prioritisation, planning, content drafting and routine studio operations. Do not ask the founder to decide routine internal matters.
+- Initial outbound messages are authorised up to 15 per calendar day ONLY through a connected, permitted communication channel. Respect recipient business hours, deduplicate recipients, honour opt-outs, and record source evidence plus send outcomes. If no channel is connected, prepare drafts and report the integration blocker; never claim a message was sent.
+- Founder approval remains mandatory for pricing outside approved rules, negotiations, contracts, financial commitments and website changes. Never invent field validation, customer outcomes or product capabilities.
 
 OUTPUT:
 Return strict JSON. Always include summary, deliverable, sections, open_questions, factuality_check, and approval_request.
@@ -319,7 +334,7 @@ For sales and market tasks, distinguish sourced evidence from fit hypotheses and
                     },
                     "founder_brand": "@mahdieh.codes; Building things & figuring things out.; founder-led, warm, conversational, dry understated humour."
                 },
-                "autonomy": "limited; internal preparation only; external actions require founder approval",
+                "autonomy": "high; independent internal execution; up to 15 initial outbound messages per day through connected permitted channels; founder approval required for pricing exceptions, negotiations, contracts, financial commitments and website changes",
             }
             llm_payload = {
                 "model": settings.llm_model, "temperature": 0.2,
@@ -357,8 +372,7 @@ For sales and market tasks, distinguish sourced evidence from fit hypotheses and
                 existing_draft = (db.table("office_content_drafts").select("id")
                     .eq("user_id", user_id)
                     .filter("metadata->>task_id", "eq", str(task.get("id")))
-                    .limit(1).execute())
-                if not existing_draft.data:
+                    .limit(1).execute())                if not existing_draft.data:
                     db.table("office_content_drafts").insert({
                         "user_id": user_id, "agent": "natasha", "platform": platform,
                         "account_type": account_type, "title": str(output.get("title") or task.get("title"))[:240],
@@ -537,8 +551,7 @@ COMMUNICATION:
         async with httpx.AsyncClient(timeout=90.0) as client:
             response = await client.post(
                 f"{settings.llm_base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-                json=llm_payload,
+                headers={"Authorization": f"Bearer {settings.llm_api_key}"},                json=llm_payload,
             )
             response.raise_for_status()
             answer = response.json()["choices"][0]["message"]["content"]
