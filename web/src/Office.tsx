@@ -62,13 +62,13 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
  }
  async function review(id:string,decision:"approved"|"rejected"){
   setBusy(id);setError("");
-  try{await api(`/api/office/approvals/${id}/review`,token,{method:"POST",body:JSON.stringify({decision})});await refresh();notify(decision==="approved"?"Approval recorded. External action has not been executed.":"Request rejected.");}
+  try{await api(`/api/office/approvals/${id}/review`,token,{method:"POST",body:JSON.stringify({decision})});await refresh();notify(decision==="approved"?"Approval decision recorded. No external action was executed.":"Request rejected.");}
   catch(err){setError(err instanceof Error?err.message:"Could not review request.");}
   finally{setBusy("");}
  }
  const pending=approvals.filter(x=>x.status==="pending");
  return <div className="office-page">
-  <div className="page-heading"><div><div className="eyebrow muted">VARIA STUDIO · AI-NATIVE WORKSPACE</div><h1>Varia AI Office.</h1><p>One shared workspace. Three specialist agents. You retain control of external actions.</p></div><button className="secondary-btn" onClick={refresh}><Activity size={15}/> Refresh</button></div>
+  <div className="page-heading"><div><div className="eyebrow muted">VARIA STUDIO · AI-NATIVE WORKSPACE</div><h1>Varia AI Office.</h1><p>One shared workspace for sales, creative work and studio operations. External actions stay under your control.</p></div><button className="secondary-btn" onClick={refresh} disabled={loading}><Activity size={15}/> {loading?"Refreshing…":"Refresh"}</button></div>
   {error&&<div className="error-banner"><span>{error}</span><button onClick={()=>setError("")}><X size={15}/></button></div>}
   <div className="office-metrics">
    <div className="metric-card"><div className="metric-top">Agents <Bot size={17}/></div><strong>{overview?.agents??3}</strong><small>Shared office team</small></div>
@@ -98,15 +98,15 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
    <section className="panel"><div className="panel-head"><div><h3>Recent tasks</h3><p>Shared activity across the three agents</p></div><span className="small-count">{tasks.length}</span></div>
     {tasks.slice(0,8).map(t=><button className={`office-task-row list-row ${selectedTask?.id===t.id?"selected":""}`} key={t.id} onClick={()=>setSelectedTask(t)}><div className="job-icon"><Bot size={16}/></div><div className="row-main"><strong>{t.title}</strong><small>{names[t.agent]||t.agent} · {date(t.created_at)}</small></div><span className={`status-text ${t.status}`}>{t.status.replace(/_/g," ")}</span></button>)}
     {!tasks.length&&<div className="empty-note"><Clock3 size={18}/> {loading?"Loading tasks…":"No office tasks yet."}</div>}
-    {selectedTask&&<div className="office-task-result"><div className="panel-head"><div><h3>{selectedTask.title}</h3><p>{names[selectedTask.agent]||selectedTask.agent} · {selectedTask.status}</p></div><button className="icon-btn" onClick={()=>setSelectedTask(null)}><X size={15}/></button></div>{selectedTask.error&&<p className="office-task-error">{selectedTask.error}</p>}<pre>{JSON.stringify(selectedTask.result??{message:"No result has been returned yet."},null,2)}</pre></div>}
+    {selectedTask&&<div className="office-task-result"><div className="panel-head"><div><h3>{selectedTask.title}</h3><p>{names[selectedTask.agent]||selectedTask.agent} · {selectedTask.status}</p></div><button className="icon-btn" onClick={()=>setSelectedTask(null)}><X size={15}/></button></div>}{selectedTask.error&&<p className="office-task-error">{selectedTask.error}</p>}{selectedTask.result?.summary&&<p className="task-result-summary">{selectedTask.result.summary}</p>}{selectedTask.result?.deliverable&&<div className="task-result-deliverable">{typeof selectedTask.result.deliverable==="string"?selectedTask.result.deliverable:JSON.stringify(selectedTask.result.deliverable,null,2)}</div>}<details className="task-result-raw"><summary>Technical result data</summary><pre>{JSON.stringify(selectedTask.result??{message:"No result has been returned yet."},null,2)}</pre></details></div>}
    </section>
   </div>
   <div className="office-columns">
-   <section className="panel"><div className="panel-head"><div><h3>Approval centre</h3><p>External actions are never silently executed.</p></div><span className="small-count">{pending.length} pending</span></div>
-    {pending.map(p=><div className="approval-card" key={p.id}><div><span className="approval-type">{p.action_type.replace(/_/g," ")}</span><strong>{p.title}</strong><p>{p.summary}</p><small>{names[p.agent]||p.agent} · {date(p.created_at)}</small></div><div className="approval-actions"><button className="secondary-btn" disabled={busy===p.id} onClick={()=>review(p.id,"approved")}><Check size={14}/> Approve</button><button className="icon-btn" disabled={busy===p.id} title="Reject" onClick={()=>review(p.id,"rejected")}><X size={16}/></button></div></div>)}
+   <section className="panel"><div className="panel-head"><div><h3>Approval centre</h3><p>Records your decision only; it does not send or publish.</p></div><span className="small-count">{pending.length} pending</span></div>
+    {pending.map(p=><div className="approval-card" key={p.id}><div><span className="approval-type">{p.action_type.replace(/_/g," ")}</span><strong>{p.title}</strong><p>{p.summary}</p><small>{names[p.agent]||p.agent} · {date(p.created_at)}</small></div><div className="approval-actions"><button className="secondary-btn" disabled={busy===p.id} onClick={()=>review(p.id,"approved")}><Check size={14}/> Record approval</button><button className="icon-btn" disabled={busy===p.id} title="Reject" onClick={()=>review(p.id,"rejected")}><X size={16}/></button></div></div>)}
     {!pending.length&&<div className="empty-note"><ShieldCheck size={18}/> No pending approvals.</div>}
    </section>
-   <section className="panel"><div className="panel-head"><div><h3>Content studio</h3><p>Drafts from the Marketing Agent</p></div><span className="small-count">{content.length} drafts</span></div>
+   <section className="panel"><div className="panel-head"><div><h3>Content studio</h3><p>Drafts prepared by Tony · review before publishing</p></div><span className="small-count">{content.length} drafts</span></div>
     {content.slice(0,6).map(c=><div className="draft-mini" key={c.id}><strong>{c.title}</strong><small>{c.platform} · {c.status} · {date(c.created_at)}</small><p>{c.body.slice(0,180)}{c.body.length>180?"…":""}</p></div>)}
     {!content.length&&<div className="empty-note"><FileText size={18}/> No content drafts yet. Assign the Marketing Agent a content task.</div>}
    </section>
