@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from typing import Annotated
+from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -266,3 +267,128 @@ async def send_gmail_self_test(user_id: Annotated[str, Depends(current_user_id)]
         if send_response.is_error:
             raise HTTPException(status_code=502, detail="Gmail API rejected the self-test message")
     return {"status": "sent", "to": destination, "scope": "self_test_only"}
+
+
+@router.post("/send-approved/{draft_id}")
+async def send_approved_draft(
+    draft_id: UUID,
+    user_id: Annotated[str, Depends(current_user_id)],
+) -> dict:
+    """Send only a founder-approved draft to a verified, non-opted-out CRM contact."""
+    db = _service_db()
+    draft_rows = (db.table("natasha_message_drafts").select("*")
+        .eq("id", str(draft_id)).eq("user_id", user_id).limit(1).execute().data or [])
+    if not draft_rows:
+        raise HTTPException(status_code=404, detail="Email draft not found")
+    draft = draft_rows[0]
+    if draft.get("status") != "approved":
+        raise HTTPException(status_code=409, detail="Only founder-approved drafts can be sent")
+
+    lead_rows = (db.table("natasha_leads").select("id,primary_contact_id")
+        .eq("id", str(draft.get("lead_id"))).eq("user_id", user_id).limit(1).execute().data or [])
+    if not lead_rows or not lead_rows[0].get("primary_contact_id"):
+        raise HTTPException(status_code=409, detail="Draft must be linked to a CRM lead with a primary contact")
+    lead = lead_rows[0]
+    contact_rows = (db.table("natasha_contacts").select("id,email,email_verified,email_opted_out,timezone")
+        .eq("id", str(lead["primary_contact_id"])).eq("user_id", user_id).limit(1).execute().data or [])
+    if not contact_rows:
+        raise HTTPException(status_code=409, detail="CRM contact not found")
+    contact = contact_rows[0]
+    recipient = str(contact.get("email") or "").strip().lower()
+    if not contact.get("email_verified") or contact.get("email_opted_out"):
+        raise HTTPException(status_code=403, detail="Recipient email is not verified or has opted out")
+    if not recipient or recipient != str(draft.get("recipient") or "").strip().lower():
+        raise HTTPException(status_code=409, detail="Draft recipient does not match the verified CRM contact")
+
+    try:
+        local_now = datetime.now(timezone.utc).astimezone(ZoneInfo(contact.get("timezone") or "UTC"))
+    except Exception:
+        raise HTTPException(status_code=422, detail="Contact timezone is invalid; update the CRM contact")
+    if local_now.weekday() >= 5 or local_now.hour < 9 or local_now.hour >= 17:
+        raise HTTPException(status_code=403, detail="Recipient local sending window is weekdays 09:00–17:00")
+
+    connection_rows = (db.table("gmail_connections").select("email,refresh_token_ciphertext")
+        .eq("user_id", user_id).limit(1).execute().data or [])
+    if not connection_rows:
+        raise HTTPException(status_code=409, detail="Connect Gmail before sending")
+    connection = connection_rows[0]
+    refresh_token = _unseal(connection["refresh_token_ciphertext"])
+
+    send_date = datetime.now(timezone.utc).date().isoformat()
+    reserved = db.rpc("gmail_reserve_send_slot", {
+        "p_user_id": user_id, "p_send_date": send_date
+    }).execute().data
+    if reserved is not True:
+        raise HTTPException(status_code=429, detail="Daily first-touch limit of 15 messages reached")
+
+    claimed = (db.table("natasha_message_drafts").update({"status": "sending"})
+        .eq("id", str(draft_id)).eq("user_id", user_id).eq("status", "approved").execute().data or [])
+    if not claimed:
+        db.rpc("gmail_release_send_slot", {"p_user_id": user_id, "p_send_date": send_date}).execute()
+        raise HTTPException(status_code=409, detail="Draft was already claimed or changed")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token_response = await client.post(GOOGLE_TOKEN_URL, data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            })
+            if token_response.is_error:
+                db.table("natasha_message_drafts").update({"status": "approved"}).eq("id", str(draft_id)).eq("status", "sending").execute()
+                db.rpc("gmail_release_send_slot", {"p_user_id": user_id, "p_send_date": send_date}).execute()
+                raise HTTPException(status_code=502, detail="Google token refresh failed; reconnect Gmail")
+            access_token = token_response.json()["access_token"]
+            message = EmailMessage()
+            message["To"] = recipient
+            message["Subject"] = str(draft.get("subject") or "").strip() or "Varia Studio"
+            message.set_content(str(draft.get("body") or ""))
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
+            send_response = await client.post(
+                GMAIL_SEND_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                json={"raw": raw},
+            )
+            if send_response.is_error:
+                db.table("natasha_message_drafts").update({"status": "approved"}).eq("id", str(draft_id)).eq("status", "sending").execute()
+                db.rpc("gmail_release_send_slot", {"p_user_id": user_id, "p_send_date": send_date}).execute()
+                raise HTTPException(status_code=502, detail="Gmail rejected the message; draft returned to approved")
+            provider_message_id = send_response.json().get("id")
+    except HTTPException:
+        raise
+    except Exception:
+        # Delivery outcome may be ambiguous after a network failure. Keep the
+        # draft in 'sending' and reserve the quota to prevent accidental duplicates.
+        raise HTTPException(status_code=502, detail="Gmail send outcome is uncertain; draft locked to prevent duplicate delivery")
+
+    sent_at = datetime.now(timezone.utc).isoformat()
+    db.table("natasha_message_drafts").update({
+        "status": "sent",
+        "sent_at": sent_at,
+        "provider_message_id": provider_message_id,
+        "updated_at": sent_at,
+    }).eq("id", str(draft_id)).eq("status", "sending").execute()
+    db.table("natasha_leads").update({
+        "stage": "contacted",
+        "last_contacted_at": sent_at,
+        "updated_at": sent_at,
+    }).eq("id", str(lead["id"])).eq("user_id", user_id).execute()
+    db.table("natasha_activities").insert({
+        "user_id": user_id,
+        "lead_id": lead["id"],
+        "contact_id": contact["id"],
+        "activity_type": "email_sent",
+        "subject": draft.get("subject"),
+        "body": draft.get("body"),
+        "occurred_at": sent_at,
+        "metadata": {"draft_id": str(draft_id), "provider": "gmail", "provider_message_id": provider_message_id},
+    }).execute()
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id,
+        "entity_type": "email_draft",
+        "entity_id": str(draft_id),
+        "action": "gmail_email_sent",
+        "details": {"recipient": recipient, "provider_message_id": provider_message_id},
+    }).execute()
+    return {"status": "sent", "to": recipient, "provider_message_id": provider_message_id}
