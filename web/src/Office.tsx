@@ -3,7 +3,7 @@ import { Activity, ArrowUpRight, Bot, Check, ClipboardCheck, Clock3, FileText, M
 
 const API = (import.meta.env.VITE_NATASHA_API_URL || "https://natasha-api.onrender.com").replace(/\/$/, "");
 type Agent = {id:string;name:string;role:string;status:string;scope:string[]};
-type Task = {id:string;agent:string;task_type:string;title:string;status:string;created_at:string;description?:string};
+type Task = {id:string;agent:string;task_type:string;title:string;status:string;created_at:string;description?:string;result?:any;error?:string};
 type Approval = {id:string;agent:string;action_type:string;title:string;summary:string;status:string;created_at:string};
 type Content = {id:string;platform:string;account_type?:string;title:string;body:string;status:string;created_at:string};
 type Overview = {tasks:number;queued_tasks:number;running_tasks:number;pending_approvals:number;content_drafts:number;agents:number;autonomy_level:string;email_provider:string};
@@ -31,6 +31,7 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
  const [loading,setLoading]=useState(true);
  const [busy,setBusy]=useState("");
  const [error,setError]=useState("");
+ const [selectedTask,setSelectedTask]=useState<Task|null>(null);
  const [agent,setAgent]=useState("natasha");
  const [title,setTitle]=useState("");
  const [description,setDescription]=useState("");
@@ -91,8 +92,9 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
     <div className="office-footnote"><ShieldCheck size={14}/> Task creation does not authorize external communication or publication.</div>
    </section>
    <section className="panel"><div className="panel-head"><div><h3>Recent tasks</h3><p>Shared activity across the three agents</p></div><span className="small-count">{tasks.length}</span></div>
-    {tasks.slice(0,8).map(t=><div className="list-row" key={t.id}><div className="job-icon"><Bot size={16}/></div><div className="row-main"><strong>{t.title}</strong><small>{names[t.agent]||t.agent} · {date(t.created_at)}</small></div><span className={`status-text ${t.status}`}>{t.status.replace(/_/g," ")}</span></div>)}
+    {tasks.slice(0,8).map(t=><button className={`office-task-row list-row ${selectedTask?.id===t.id?"selected":""}`} key={t.id} onClick={()=>setSelectedTask(t)}><div className="job-icon"><Bot size={16}/></div><div className="row-main"><strong>{t.title}</strong><small>{names[t.agent]||t.agent} · {date(t.created_at)}</small></div><span className={`status-text ${t.status}`}>{t.status.replace(/_/g," ")}</span></button>)}
     {!tasks.length&&<div className="empty-note"><Clock3 size={18}/> {loading?"Loading tasks…":"No office tasks yet."}</div>}
+    {selectedTask&&<div className="office-task-result"><div className="panel-head"><div><h3>{selectedTask.title}</h3><p>{names[selectedTask.agent]||selectedTask.agent} · {selectedTask.status}</p></div><button className="icon-btn" onClick={()=>setSelectedTask(null)}><X size={15}/></button></div>{selectedTask.error&&<p className="office-task-error">{selectedTask.error}</p>}<pre>{JSON.stringify(selectedTask.result??{message:"No result has been returned yet."},null,2)}</pre></div>}
    </section>
   </div>
   <div className="office-columns">
