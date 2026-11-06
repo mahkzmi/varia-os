@@ -6,7 +6,7 @@ type Agent = {id:string;name:string;role:string;status:string;scope:string[]};
 type Task = {id:string;agent:string;task_type:string;title:string;status:string;created_at:string;description?:string;result?:any;error?:string};
 type Approval = {id:string;agent:string;action_type:string;title:string;summary:string;status:string;created_at:string};
 type Content = {id:string;platform:string;account_type?:string;title:string;body:string;status:string;created_at:string};
-type Overview = {tasks:number;queued_tasks:number;running_tasks:number;pending_approvals:number;content_drafts:number;agents:number;autonomy_level:string;email_provider:string};
+type Overview = {tasks:number;queued_tasks:number;running_tasks:number;pending_approvals:number;content_drafts:number;agents:number;autonomy_level:string;email_provider:string;sales_leads_total?:number;sales_qualified_leads?:number;sales_open_leads?:number;sales_unpriced_open_leads?:number;sales_won_leads?:number;sales_pipeline_value_by_currency?:Record<string,number>};
 
 async function api(path:string, token:string, init:RequestInit={}) {
   const res = await fetch(API+path,{...init,headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,...(init.headers||{})}});
@@ -75,7 +75,11 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
    <div className="metric-card"><div className="metric-top">Queued tasks <Clock3 size={17}/></div><strong>{overview?.queued_tasks??0}</strong><small>Waiting for the worker</small></div>
    <div className="metric-card"><div className="metric-top">Approvals <ClipboardCheck size={17}/></div><strong>{overview?.pending_approvals??0}</strong><small>Founder review required</small></div>
    <div className="metric-card"><div className="metric-top">Content drafts <FileText size={17}/></div><strong>{overview?.content_drafts??0}</strong><small>Not published</small></div>
+   <div className="metric-card"><div className="metric-top">Sales leads <ArrowUpRight size={17}/></div><strong>{overview?.sales_leads_total??0}</strong><small>Recorded opportunities</small></div>
+   <div className="metric-card"><div className="metric-top">Qualified <ShieldCheck size={17}/></div><strong>{overview?.sales_qualified_leads??0}</strong><small>Beyond initial research</small></div>
+   <div className="metric-card"><div className="metric-top">Unpriced leads <Clock3 size={17}/></div><strong>{overview?.sales_unpriced_open_leads??0}</strong><small>Need a commercial value</small></div>
   </div>
+  <div className="office-footnote"><strong>Revenue pipeline:</strong> {Object.entries(overview?.sales_pipeline_value_by_currency??{}).map(([currency,amount])=>`${currency} ${amount.toLocaleString()}`).join(" · ")||"No priced opportunities yet"} · Won deals: {overview?.sales_won_leads??0}</div>
   <div className="office-policy"><ShieldCheck size={18}/><div><strong>Limited autonomy is active</strong><span>Gmail selected · first-touch emails, public posts, pricing, negotiations, contracts and financial commitments remain approval-gated.</span></div><span className="policy-chip">HUMAN CONTROL</span></div>
   <section className="office-agents">
    {agents.map(a=><article className="panel office-agent" key={a.id}><div className="office-agent-top"><div className="office-agent-icon"><Bot size={20}/></div><span className={`agent-state ${a.status}`}>{a.status==="active"?"CONNECTED":"CONFIGURED"}</span></div><h3>{a.name}</h3><div className="office-role">{a.role}</div><p>{descriptions[a.id]}</p><div className="office-scope">{a.scope.slice(0,4).map(s=><span key={s}>{s.replace(/_/g," ")}</span>)}</div><button className="text-btn" onClick={()=>{setAgent(a.id);setTaskType(a.id==="natasha"?"research":a.id==="marketing"?"content_draft":"proposal");document.getElementById("office-task-title")?.focus();}}>Assign a task <ArrowUpRight size={14}/></button></article>)}
