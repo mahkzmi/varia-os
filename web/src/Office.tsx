@@ -19,6 +19,7 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
  const [tasks,setTasks]=useState<any[]>([]);
  const [approvals,setApprovals]=useState<any[]>([]);
  const [contentDrafts,setContentDrafts]=useState<any[]>([]);
+ const [officeOverview,setOfficeOverview]=useState<any>({});
  const [memoryText,setMemoryText]=useState("");
  const [memoryBusy,setMemoryBusy]=useState(false);
 
@@ -35,8 +36,8 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
  }
  async function loadStudioWork(){
   try{
-   const [t,a,d]=await Promise.all([call("/api/office/tasks",token),call("/api/office/approvals",token),call("/api/office/content",token)]);
-   setTasks(t);setApprovals(a);setContentDrafts(d);
+   const [t,a,d,o]=await Promise.all([call("/api/office/tasks",token),call("/api/office/approvals",token),call("/api/office/content",token),call("/api/office/overview",token)]);
+   setTasks(t);setApprovals(a);setContentDrafts(d);setOfficeOverview(o);
   }catch(e){setError(e instanceof Error?e.message:"Could not load studio work");}
  }
  useEffect(()=>{loadConversations();loadMemories();loadStudioWork();},[token]);
@@ -121,6 +122,13 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
     </div>
    </div>
   </section>
+  <section className="panel hq-queue-panel">
+   <div className="panel-head"><div><span className="eyebrow">AUTONOMY · OPERATING CONTROL</span><h3>Natasha is configured to operate independently.</h3><p>Internal work runs around the clock. External actions remain channel- and policy-gated.</p></div><ShieldCheck/></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>High autonomy · {officeOverview.active_hours||"24/7"}</b><small>Maximum {officeOverview.max_initial_messages_per_day??15} first-touch messages per day · only through a connected permitted channel</small></div></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>{officeOverview.sales_qualified_leads??0} qualified · {officeOverview.sales_won_leads??0} won</b><small>{officeOverview.sales_open_leads??0} open sales leads · unpriced leads are not counted as revenue</small></div></div>
+   <div className="hq-task"><span className="hq-task-dot"/><div><b>Outbound and publishing status</b><small>Not connected: external messages and social publishing are blocked until an approved account integration is connected.</small></div></div>
+   {(()=>{const cycle=tasks.find((t:any)=>t.task_type==="autonomous_cycle");return <div className="hq-task"><span className="hq-task-dot"/><div><b>Latest daily operating report · {cycle?.status||"not run"}</b><small>{cycle?.completed_at?new Date(cycle.completed_at).toLocaleString():cycle?.created_at?new Date(cycle.created_at).toLocaleString():"No report recorded yet"}</small>{cycle?.result?.summary&&<p>{cycle.result.summary}</p>}</div></div>;})()}
+  </section>
   <section className="hq-work-grid hq-work-grid-single">
    <div className="panel hq-queue-panel">
     <div className="panel-head"><div><span className="eyebrow">EXECUTION</span><h3>Work queue</h3></div><span className="small-count">{tasks.length}</span></div>
@@ -145,7 +153,7 @@ export default function Office({token,notify}:{token:string;notify:(s:string)=>v
     <button className="secondary-btn" disabled={memoryBusy||!memoryText.trim()}>{memoryBusy?"Saving…":"Save context"}</button>
    </form>
    <div className="hq-memory-list">{memories.filter((m:any)=>m.agent==="shared"||m.agent==="natasha").slice(0,6).map((m:any)=><div key={m.id}><small>{m.memory_type||"Founder note"}</small><span>{m.content}</span></div>)}</div>
-   <div className="office-footnote"><ShieldCheck size={14}/> Natasha can prepare work and recommendations. External messages, publishing, financial commitments and contracts still require your explicit approval.</div>
+   <div className="office-footnote"><ShieldCheck size={14}/> High autonomy is active for internal work. Up to 15 first-touch messages/day are authorised only after a permitted channel is connected. Pricing exceptions, negotiations, contracts, financial commitments and website changes require founder approval.</div>
   </section>
  </main>;
 }
