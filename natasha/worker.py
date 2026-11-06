@@ -122,12 +122,14 @@ def main() -> None:
     with httpx.Client(timeout=httpx.Timeout(180.0, connect=15.0)) as client:
         while not _shutdown:
             try:
-                job = claim_one(db)
-                if job:
-                    process_job(db, job, client)
+                # Keep founder-facing Office work responsive; long-running web research
+                # must not block content and operations tasks in the same worker tick.
                 office_task = claim_office_one(db)
                 if office_task:
                     process_office_task(db, office_task, client)
+                job = claim_one(db)
+                if job:
+                    process_job(db, job, client)
             except Exception:
                 logger.exception("Worker polling cycle failed")
             if ONE_SHOT:
