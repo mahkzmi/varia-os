@@ -466,15 +466,31 @@ class AgentRunRequest(BaseModel):
 
 
 def _sales_system_prompt() -> str:
-    return """You are Natasha, research and sales operations for Varia Studio, a one-person AgTech AI business.
-Focus only on Varia Vision: early computer vision for crop/weed detection from field imagery.
-Offer routes are hypotheses: audit (bounded image assessment), pilot (time-boxed paid evaluation), api_white_label (technical discovery only; do not imply production API/SLA), discovery_pending (buyer need unclear).
-Prioritize: (1) agricultural drone/aerial-imagery providers, crop scouting and agronomy services; (2) AgTech/crop-monitoring platforms with evidenced imagery workflows and plausible integration gaps; (3) agricultural equipment, robotics, precision-weeding firms where complementary integration is credible.
-Do not prioritize generic AI vendors, annotation platforms, software agencies, directories, investors, research institutions, or competitors merely because they mention computer vision. Include only when supplied evidence shows a specific buyer need or credible partnership path.
-Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, buying intent, capabilities, or contact details. Agricultural relevance alone is insufficient: explain the imagery workflow and why Varia Vision may help. Score conservatively: imagery workflow 30, weed/crop visual problem 25, buyer/contact route 20, commercial plausibility 15, evidence quality 10. Score is research priority, never buyer qualification.
-Reject article/directory URLs as company websites. Flag duplicates and uncertainty. Never guess email; verified=true only if exact public address appears in supplied evidence, otherwise false and empty.
-Return strict JSON key 'leads'; fields: company_name, website, country, industry, fit_score, fit_rationale, evidence, recommended_angle, recommended_offer_route, next_action, contact_role, contact_email, contact_email_verified, email_subject, email_body.
-Draft one-to-one outreach based on one verified company workflow, in the founder's first-person voice. Never sign as Natasha. Do not claim unproven field results, ROI, herbicide savings, accuracy guarantees, integrations, production readiness, pricing, or delivery commitments.
+    return """You are Natasha, research and sales operations for Varia Studio, an independent AI studio for agriculture.
+Focus only on Varia Vision: an early computer-vision prototype for weed/crop detection from aerial imagery. Do not present it as a production platform or field-validated commercial product.
+Your goal is to find plausible BUYERS or carefully evidenced INTEGRATION PARTNERS, not companies that are merely relevant to agriculture or computer vision.
+
+CLASSIFY EVERY CANDIDATE using prospect_type:
+- buyer: agricultural drone/aerial-imagery service provider, crop scouting business, agronomy consultancy, or crop-monitoring service that already handles field imagery for paying farming customers and could buy a bounded image audit or paid evaluation.
+- integration_partner: agricultural software/equipment platform with a documented imagery workflow and a credible complementary integration gap; evidence must show why Varia Vision adds something they do not already sell.
+- competitor: already sells weed detection, crop/weed recognition, precision weeding vision, or a substantially similar product. EXCLUDE.
+- vendor: sells annotation, training data, generic AI development, or outsourced software services. EXCLUDE.
+- directory, publisher, investor, research, university, unclear: EXCLUDE unless the supplied evidence explicitly demonstrates a real buying programme and named commercial use case.
+A company offering the same weed-detection capability is not automatically a partner. Do not re-label competitors as integration partners without a specific, evidence-backed gap.
+
+Qualification gates (all required):
+1. The candidate is a real operating organisation, not an article, listicle, directory entry, or product roundup.
+2. At least one supplied source directly supports its agricultural imagery workflow.
+3. The use case is complementary to Varia Vision and not simply a competing product.
+4. The commercial role is buyer or integration_partner and the rationale is specific.
+5. Evidence is provided as source URLs plus the exact claim each source supports. If evidence is weak or indirect, EXCLUDE rather than guessing.
+Never create a lead solely because a company is well-known in AgTech.
+
+Offer routes are hypotheses only: audit (bounded image assessment), pilot (time-boxed paid evaluation), api_white_label (technical discovery only; do not imply production API/SLA), discovery_pending (need unclear). Never send pricing or claim buying intent.
+Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, buying intent, capabilities, or contact details. Agricultural relevance alone is insufficient. Score conservatively and explain uncertainty. fit_score is research priority, never buyer qualification.
+Reject article/directory URLs as company websites. Flag duplicates. Never guess email; contact_email_verified=true only if the exact public address appears in supplied evidence, otherwise false and empty.
+Return strict JSON key 'leads'; fields: company_name, website, country, industry, prospect_type, fit_score, fit_rationale, evidence, recommended_angle, recommended_offer_route, next_action, contact_role, contact_email, contact_email_verified, email_subject, email_body.
+Draft one-to-one outreach only when there is a defensible complementary use case. Never sign as Natasha. Do not claim unproven field results, ROI, herbicide savings, accuracy guarantees, integrations, production readiness, pricing, or delivery commitments.
 Return no markdown fences."""
 
 
@@ -606,10 +622,11 @@ async def run_sales_agent(
                         {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)},
                         {"role": "user", "content": (
                             "Your previous JSON was valid but returned an empty leads array. "
-                            "Re-examine ONLY the supplied search results. If any identifiable organization "
-                            "is relevant or plausibly adjacent to the target customer profile, include the "
-                            "best candidate(s), up to max_companies. Use a conservative fit_score and clearly "
-                            "state uncertainty. Do not invent facts, people, emails, or capabilities. "
+                            "Re-examine ONLY the supplied search results. Include only candidates that pass every "
+                            "qualification gate in the system prompt and classify as buyer or integration_partner. "
+                            "Exclude competitors, vendors, directories, publishers, investors, universities and "
+                            "research institutions. It is acceptable and preferable to return an empty leads array "
+                            "when no defensible buyer or partner exists. Do not invent facts, people, emails, or capabilities. "
                             'Return only JSON with a non-empty "leads" array when evidence supports a candidate; '
                             'otherwise return {"leads": []}.'
                         )},
@@ -664,9 +681,20 @@ async def run_sales_agent(
     created = []
     for item in result.get("leads", [])[:run_limit]:
         name = str(item.get("company_name", "")).strip()
-        if not name:
+        prospect_type = str(item.get("prospect_type", "")).strip().lower()
+        if not name or prospect_type not in {"buyer", "integration_partner"}:
+            continue
+        evidence = item.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
             continue
         website = item.get("website")
+        if not isinstance(website, str) or not website.strip():
+            continue
+        from urllib.parse import urlparse
+        parsed_website = urlparse(website if "://" in website else f"https://{website}")
+        path_lower = parsed_website.path.lower()
+        if any(part in path_lower for part in ("/blog", "/resources", "/article", "/news", "/insights", "/directory", "/companies/")):
+            continue
         existing = (
             db.table("natasha_companies").select("id")
             .eq("user_id", user_id).eq("name", name).limit(1).execute()
@@ -706,7 +734,8 @@ async def run_sales_agent(
             "fit_rationale": str(item.get("fit_rationale", ""))[:4000],
             "next_action": str(item.get("next_action", "Review research and identify a decision-maker"))[:1000],
             "notes": json.dumps({
-                "evidence": item.get("evidence", []),
+                "evidence": evidence,
+                "prospect_type": prospect_type,
                 "recommended_angle": item.get("recommended_angle"),
                 "recommended_offer_route": item.get("recommended_offer_route", "discovery_pending"),
                 "contact_role": item.get("contact_role"),
@@ -726,7 +755,8 @@ async def run_sales_agent(
         created.append({
             "company": name, "lead": lead,
             "draft": draft.data[0] if draft.data else None,
-            "evidence": item.get("evidence", []),
+            "evidence": evidence,
+            "prospect_type": prospect_type,
             "recommended_angle": item.get("recommended_angle"),
         })
 
