@@ -968,4 +968,6 @@ async def internal_worker_tick(
 
 # Varia AI Office shared workspace API
 from .office import router as office_router
+from .gmail import router as gmail_router
 app.include_router(office_router)
+app.include_router(gmail_router)
