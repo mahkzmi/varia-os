@@ -1,5 +1,6 @@
 name: Varia AI Office Worker
 # Dispatch on workflow changes so queued work can be drained immediately.
+# Retry and recovery are handled by the queue lease in Supabase.
 
 on:
   push:
