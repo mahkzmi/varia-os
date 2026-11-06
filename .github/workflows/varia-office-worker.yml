@@ -1,4 +1,5 @@
 name: Varia AI Office Worker
+# Dispatch on workflow changes so queued work can be drained immediately.
 
 on:
   push:
