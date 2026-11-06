@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     supabase_publishable_key: str = ""
+    worker_api_key: str = ""
     tavily_api_key: str = ""
     llm_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
