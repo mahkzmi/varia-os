@@ -819,3 +819,8 @@ async def internal_agent_run(
         raise HTTPException(status_code=503, detail="Supabase URL is not configured")
     service_db = create_client(settings.supabase_url, expected)
     return await run_sales_agent(request.payload, str(request.user_id), service_db)
+
+
+# Varia AI Office shared workspace API
+from .office import router as office_router
+app.include_router(office_router)
