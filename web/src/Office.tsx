@@ -38,8 +38,8 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
  const [taskType,setTaskType]=useState("research");
  const [platform,setPlatform]=useState("instagram");
 
- const refresh=useCallback(async()=>{
-  setLoading(true);setError("");
+ const refresh=useCallback(async(showLoading=true)=>{
+  if(showLoading)setLoading(true);setError("");
   try{
    const [o,a,t,p,c]=await Promise.all([
     api("/api/office/overview",token),api("/api/office/agents",token),api("/api/office/tasks",token),
@@ -47,9 +47,13 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
    ]);
    setOverview(o);setAgents(a);setTasks(t);setApprovals(p);setContent(c);
   }catch(e){setError(e instanceof Error?e.message:"Could not load AI Office");}
-  finally{setLoading(false);}
+  finally{if(showLoading)setLoading(false);}
  },[token]);
- useEffect(()=>{refresh();},[refresh]);
+ useEffect(()=>{
+  refresh();
+  const timer=window.setInterval(()=>refresh(false),30000);
+  return ()=>window.clearInterval(timer);
+ },[refresh]);
 
  async function queueTask(e:React.FormEvent){
   e.preventDefault();if(!title.trim())return;
