@@ -118,16 +118,12 @@ Important: Natasha currently assigns `qualified` automatically based on fit scor
 The current database already supports:
 - `natasha_companies`: company name, website, industry, country, notes, source.
 - `natasha_contacts`: full name, role, email, LinkedIn URL, decision-maker flag, notes.
-- `natasha_leads`: product, stage, source, fit score/rationale, estimated value, currency, next action, next-action date, last-contacted date, notes, primary contact.
+- `natasha_leads`: product, stage, offer route, source, fit score/rationale, estimated value, currency, next action, next-action date, last-contacted date, notes, primary contact.
 - `natasha_activities`: activity type, subject, body, occurred-at, metadata.
 - `natasha_follow_ups`: title, due date, status.
 - `natasha_message_drafts`: recipient, subject, body, approval/sent status.
 
-Until a dedicated offer-type field is added, store the selected commercial route in lead notes using exactly one of:
-- `offer_route: audit`
-- `offer_route: pilot`
-- `offer_route: api_white_label`
-- `offer_route: discovery_pending`
+Use the dedicated `natasha_leads.offer_route` field for the selected commercial route. Allowed values are `audit`, `pilot`, `api_white_label`, and `discovery_pending`. The database defaults existing and new manually created leads to `discovery_pending`; Natasha may suggest a route, but the founder must review it before treating it as the commercial choice.
 
 Store evidence as source URLs and short factual observations. Do not put unverified assumptions into the company description as facts.
 
