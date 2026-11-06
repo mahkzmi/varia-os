@@ -65,7 +65,7 @@ class ContentDraftCreate(BaseModel):
 @router.get("/agents")
 def list_agents() -> list[dict]:
     return [
-        {"id": "natasha", "name": "Natasha", "role": "Growth & Sales", "status": "active",
+        {"id": "natasha", "name": "Natasha", "role": "Growth & Sales", "status": "configured",
          "scope": ["market_research", "lead_scoring", "crm", "outreach_drafts"]},
         {"id": "marketing", "name": "Tony", "role": "Brand & Content · Creative Lead", "status": "configured",
          "scope": ["instagram_planning", "linkedin_strategy", "content_drafts", "website_checks"]},
