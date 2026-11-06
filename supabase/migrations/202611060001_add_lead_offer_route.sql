@@ -17,4 +17,4 @@ begin
 end $$;
 
 comment on column public.natasha_leads.offer_route is
-  'Founder-selected commercial route for Varia Vision: audit, pilot, api_white_label, discovery_pending. AI suggestions are not buyer commitments.';
+  'Provisional suggested commercial route for Varia Vision: audit, pilot, api_white_label, discovery_pending. AI suggestions are not buyer commitments.';
