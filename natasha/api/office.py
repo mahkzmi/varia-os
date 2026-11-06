@@ -67,31 +67,21 @@ def list_agents(
     user_id: Annotated[str, Depends(current_user_id)],
     db: Annotated[Client, Depends(get_db)],
 ) -> list[dict]:
-    def latest_status(table: str, agent: str | None = None, order_column: str = "updated_at") -> str:
-        query = db.table(table).select("status").eq("user_id", user_id)
-        if agent:
-            query = query.eq("agent", agent)
-        rows = query.order(order_column, desc=True).limit(1).execute().data or []
-        if not rows:
-            return "configured"
-        return {
-            "succeeded": "active",
-            "running": "running",
-            "queued": "queued",
-            "failed": "attention",
+    rows = (db.table("natasha_jobs").select("status").eq("user_id", user_id)
+            .order("updated_at", desc=True).limit(1).execute().data or [])
+    status_label = "configured"
+    if rows:
+        status_label = {
+            "succeeded": "active", "running": "running",
+            "queued": "queued", "failed": "attention",
         }.get(str(rows[0].get("status")), "configured")
-
-    return [
-        {"id": "natasha", "name": "Natasha", "role": "Growth & Sales",
-         "status": latest_status("natasha_jobs"),
-         "scope": ["market_research", "lead_scoring", "crm", "outreach_drafts"]},
-        {"id": "marketing", "name": "Tony", "role": "Brand & Content · Creative Lead",
-         "status": latest_status("office_agent_runs", "marketing", "started_at"),
-         "scope": ["instagram_planning", "linkedin_strategy", "content_drafts", "website_checks"]},
-        {"id": "operations", "name": "Edith", "role": "Studio Operations · Chief of Staff",
-         "status": latest_status("office_agent_runs", "operations", "started_at"),
-         "scope": ["proposals", "documents", "project_tracking", "operational_reports"]},
-    ]
+    return [{
+        "id": "natasha",
+        "name": "Natasha",
+        "role": "AI Executive Partner",
+        "status": status_label,
+        "scope": ["strategy", "sales", "market_research", "product", "brand", "content", "operations", "planning"],
+    }]
 
 
 @router.get("/overview")
