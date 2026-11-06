@@ -215,7 +215,7 @@ async def gmail_oauth_callback(
 
 @router.get("/status")
 def gmail_connection_status(user_id: Annotated[str, Depends(current_user_id)]) -> dict:
-    if not settings.google_client_id or not settings.gmail_token_encryption_key:
+    if not settings.google_client_id or not settings.google_client_secret or not settings.gmail_token_encryption_key:
         return {"configured": False, "connected": False, "email": None}
     rows = (_service_db().table("gmail_connections").select("email,updated_at")
         .eq("user_id", user_id).limit(1).execute().data or [])
