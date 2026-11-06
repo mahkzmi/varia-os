@@ -1,8 +1,5 @@
 name: Varia AI Office Worker
-# Dispatch on workflow changes so queued work can be drained immediately.
-# Retry and recovery are handled by the queue lease in Supabase.
-# Manual dispatch after API rollout to drain queued QA work.
-# Follow-up worker tick after the first post-deploy retry window.
+# Free GitHub Actions runner drains the Supabase queues; no paid Render cron is used.
 
 on:
   push:
@@ -36,6 +33,22 @@ jobs:
 
       - name: Install runtime dependencies
         run: pip install -r natasha/api/requirements.txt
+
+      - name: Wake the free Render API before processing jobs
+        env:
+          NATASHA_API_URL: https://natasha-api.onrender.com
+        run: |
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error "$NATASHA_API_URL/health"; then
+              echo
+              echo "Natasha API is healthy."
+              exit 0
+            fi
+            echo "API is waking up (attempt $attempt/18); retrying in 10 seconds."
+            sleep 10
+          done
+          echo "Natasha API did not become healthy within 3 minutes."
+          exit 1
 
       - name: Process queued Natasha and Office tasks
         env:
