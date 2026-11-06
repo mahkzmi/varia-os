@@ -80,7 +80,7 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
    <div className="metric-card"><div className="metric-top">Unpriced leads <Clock3 size={17}/></div><strong>{overview?.sales_unpriced_open_leads??0}</strong><small>Need a commercial value</small></div>
   </div>
   <div className="office-footnote"><strong>Revenue pipeline:</strong> {Object.entries(overview?.sales_pipeline_value_by_currency??{}).map(([currency,amount])=>`${currency} ${amount.toLocaleString()}`).join(" · ")||"No priced opportunities yet"} · Won deals: {overview?.sales_won_leads??0}</div>
-  <div className="office-policy"><ShieldCheck size={18}/><div><strong>Limited autonomy is active</strong><span>Gmail selected · first-touch emails, public posts, pricing, negotiations, contracts and financial commitments remain approval-gated.</span></div><span className="policy-chip">HUMAN CONTROL</span></div>
+  <div className="office-policy"><ShieldCheck size={18}/><div><strong>Limited autonomy is active</strong><span>Gmail preference saved · mailbox access is not connected. First-touch emails, public posts, pricing, negotiations, contracts and financial commitments remain approval-gated.</span></div><span className="policy-chip">HUMAN CONTROL</span></div>
   <section className="office-agents">
    {agents.map(a=><article className="panel office-agent" key={a.id}><div className="office-agent-top"><div className="office-agent-icon"><Bot size={20}/></div><span className={`agent-state ${a.status}`}>{a.status==="active"?"CONNECTED":"CONFIGURED"}</span></div><h3>{a.name}</h3><div className="office-role">{a.role}</div><p>{descriptions[a.id]}</p><div className="office-scope">{a.scope.slice(0,4).map(s=><span key={s}>{s.replace(/_/g," ")}</span>)}</div><button className="text-btn" onClick={()=>{setAgent(a.id);setTaskType(a.id==="natasha"?"research":a.id==="marketing"?"content_draft":"proposal");document.getElementById("office-task-title")?.focus();}}>Assign a task <ArrowUpRight size={14}/></button></article>)}
   </section>
@@ -111,6 +111,6 @@ export default function Office({token,notify}:{token:string;notify:(message:stri
     {!content.length&&<div className="empty-note"><FileText size={18}/> No content drafts yet. Assign the Marketing Agent a content task.</div>}
    </section>
   </div>
-  <div className="office-footer-note"><Mail size={15}/> Gmail is the selected provider. Connect and authorize the Gmail integration before enabling mailbox access or sending; this dashboard currently stores the provider preference only.</div>
+  <div className="office-footer-note"><Mail size={15}/> Gmail is selected as a preference only. Mailbox access and sending are not connected or enabled.</div>
  </div>;
 }
