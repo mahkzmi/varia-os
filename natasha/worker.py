@@ -57,7 +57,8 @@ def process_office_task(db: Client, task: dict, client: httpx.Client) -> None:
             headers={"X-Internal-Key": SUPABASE_SERVICE_ROLE_KEY},
             json={"user_id": task["user_id"], "task": task},
         )
-        response.raise_for_status()
+        if response.is_error:
+            raise RuntimeError(f"Office API HTTP {response.status_code}: {response.text[:2000]}")
         output = response.json()
         logger.info("Office task %s succeeded (%s)", task_id, task.get("agent"))
     except Exception as exc:
@@ -87,7 +88,8 @@ def process_job(db: Client, job: dict, client: httpx.Client) -> None:
             headers={"X-Internal-Key": SUPABASE_SERVICE_ROLE_KEY},
             json={"user_id": job["user_id"], "payload": job["payload"]},
         )
-        response.raise_for_status()
+        if response.is_error:
+            raise RuntimeError(f"Natasha API HTTP {response.status_code}: {response.text[:2000]}")
         output = response.json()
         db.table("natasha_jobs").update({
             "status": "succeeded",
