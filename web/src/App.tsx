@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Office from "./Office";
 import {
   Activity, ArrowDownRight, ArrowUpRight, Bell, Bot, BriefcaseBusiness, Building2, CalendarClock,
   Check, ChevronDown, CircleHelp, Clock3, Command, Compass, CreditCard, FileText, Filter, FlaskConical,
@@ -9,7 +10,7 @@ import {
 const API = (import.meta.env.VITE_NATASHA_API_URL || "https://natasha-api.onrender.com").replace(/\/$/, "");
 const PRODUCTS = ["Varia Vision", "Varia Carbon", "Varia Trait-Bridge"];
 type AnyRow = Record<string, any>;
-type Section = "Overview" | "Natasha" | "Pipeline" | "Companies" | "Contacts" | "Drafts" | "Activity";
+type Section = "Overview" | "AI Office" | "Natasha" | "Pipeline" | "Companies" | "Contacts" | "Drafts" | "Activity";
 
 async function request(path: string, token?: string, options: RequestInit = {}) {
   const response = await fetch(API + path, {
@@ -130,6 +131,7 @@ function App() {
   }), [data]);
   const nav: {label:Section;icon:any;group:string}[] = [
     {label:"Overview",icon:LayoutDashboard,group:"WORKSPACE"},
+    {label:"AI Office",icon:BriefcaseBusiness,group:"WORKSPACE"},
     {label:"Natasha",icon:Bot,group:"WORKSPACE"},
     {label:"Pipeline",icon:Target,group:"GROWTH"},
     {label:"Companies",icon:Building2,group:"GROWTH"},
@@ -175,6 +177,7 @@ function App() {
       <div className="content-wrap">
         {error&&<div className="error-banner"><span>{error}</span><button onClick={()=>setError("")}><X size={16}/></button></div>}
         {section==="Overview"&&<Overview stats={stats} data={data} companyMap={companyMap} setSection={setSection} loading={loading}/>}
+        {section==="AI Office"&&<Office token={token} notify={notify}/>}
         {section==="Natasha"&&<Natasha mission={mission} setMission={setMission} runMission={runMission} busy={missionBusy} jobs={data.jobs} drafts={data.drafts} leads={data.leads} companies={data.companies} companyMap={companyMap} approveDraft={approveDraft} setSection={setSection}/>}
         {section==="Pipeline"&&<Pipeline leads={filteredLeads} companies={data.companies} companyMap={companyMap} search={search} setSearch={setSearch} onAdd={()=>setShowLead(true)}/>}
         {section==="Companies"&&<Companies companies={data.companies} search={search} setSearch={setSearch} onAdd={()=>setShowCompany(true)}/>}
