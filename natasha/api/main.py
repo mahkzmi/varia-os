@@ -456,6 +456,33 @@ def approve_draft(
     return result.data[0]
 
 
+@app.post("/api/drafts/{draft_id}/mark-sent")
+def mark_draft_sent(
+    draft_id: UUID,
+    user_id: Annotated[str, Depends(current_user_id)],
+    db: Annotated[Client, Depends(get_db)],
+) -> dict:
+    draft = require_owned_record(db, "natasha_message_drafts", draft_id, user_id)
+    if draft.get("status") not in {"draft", "approved"}:
+        raise HTTPException(status_code=409, detail="Only an unsent draft can be marked sent")
+    sent_at = datetime.now(timezone.utc).isoformat()
+    result = (db.table("natasha_message_drafts").update({"status": "sent", "sent_at": sent_at})
+        .eq("id", str(draft_id)).eq("user_id", user_id).in_("status", ["draft", "approved"]).execute())
+    if not result.data:
+        raise HTTPException(status_code=409, detail="Draft changed before it could be marked sent")
+    db.table("natasha_audit_events").insert({
+        "user_id": user_id, "entity_type": "message_draft", "entity_id": str(draft_id),
+        "action": "manually_marked_sent", "details": {"channel": draft.get("channel"), "recipient": draft.get("recipient")},
+    }).execute()
+    if draft.get("lead_id"):
+        db.table("natasha_activities").insert({
+            "user_id": user_id, "lead_id": draft["lead_id"], "activity_type": "note",
+            "subject": "Outreach marked sent · " + str(draft.get("channel") or "other"),
+            "body": "Founder confirmed this message was sent manually via " + str(draft.get("channel") or "external channel") + " to " + str(draft.get("recipient") or "the saved destination") + ".",
+            "metadata": {"draft_id": str(draft_id), "sent_at": sent_at, "manual": True},
+        }).execute()
+    return result.data[0]
+
 class DraftUpdate(BaseModel):
     channel: str | None = Field(default=None, pattern=r"^(email|linkedin|website|contact_form|other)$")
     recipient: str | None = Field(default=None, max_length=500)
