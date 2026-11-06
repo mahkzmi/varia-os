@@ -181,7 +181,8 @@ def review_approval(
     payload: ApprovalReview,
     user_id: Annotated[str, Depends(current_user_id)],
     db: Annotated[Client, Depends(get_db)],
-) -> dict:    existing = (db.table("office_approvals").select("id,status").eq("id", str(approval_id))
+) -> dict:
+    existing = (db.table("office_approvals").select("id,status").eq("id", str(approval_id))
                 .eq("user_id", user_id).limit(1).execute())
     if not existing.data:
         raise HTTPException(status_code=404, detail="Approval not found")
