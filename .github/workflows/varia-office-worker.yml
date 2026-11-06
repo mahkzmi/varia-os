@@ -50,6 +50,13 @@ jobs:
           echo "Natasha API did not become healthy within 3 minutes."
           exit 1
 
+      - name: Enqueue daily autonomous operating cycle
+        env:
+          SUPABASE_URL: https://gjnsyufdrgohthuxnqzf.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LOG_LEVEL: INFO
+        run: python -m natasha.planner
+
       - name: Process queued Natasha and Office tasks
         env:
           SUPABASE_URL: https://gjnsyufdrgohthuxnqzf.supabase.co
