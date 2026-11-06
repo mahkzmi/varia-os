@@ -2,3 +2,33 @@
 @media(max-width:1100px){.sidebar{width:220px}.main-area{margin-left:220px}.content-wrap{padding:32px 26px}.topbar{padding:0 26px}.metric-grid{grid-template-columns:repeat(2,1fr)}.hero-art{right:-4%;opacity:.55}.company-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.sidebar{transform:translateX(-100%);transition:transform .25s;width:260px}.sidebar.open{transform:translateX(0)}.mobile-scrim{display:block;position:fixed;inset:0;background:#0009;z-index:15}.main-area{margin-left:0}.mobile-menu,.mobile-close{display:inline-grid}.topbar{height:58px;padding:0 16px}.topbar-left{gap:8px}.topbar-right{gap:8px}.system-chip{display:none}.content-wrap{padding:26px 16px}.page-heading{align-items:flex-start;flex-direction:column;margin-bottom:22px}.page-heading>.primary-btn,.page-heading>.secondary-btn{align-self:flex-start}.hero-panel{padding:23px;min-height:225px}.hero-copy h2{font-size:23px}.hero-art{right:-180px;opacity:.3}.metric-grid{grid-template-columns:repeat(2,1fr);gap:9px}.metric-card{padding:13px;min-height:105px}.metric-card>strong{font-size:21px}.section-grid,.natasha-layout{grid-template-columns:1fr}.natasha-side{grid-template-columns:1fr 1fr}.agent-banner-right{display:none}.form-grid{grid-template-columns:1fr}.mission-bottom{align-items:stretch;flex-direction:column}.mission-bottom>div{width:100%}.mission-bottom .primary-btn{width:100%}.company-grid{grid-template-columns:1fr 1fr}.footer{padding:14px 16px;gap:12px}.footer span:last-child{text-align:right}.auth-shell{grid-template-columns:1fr}.auth-visual{display:none}.auth-panel{min-height:100vh;padding:30px 25px}.mobile-brand{display:flex;margin-bottom:55px}.auth-copyright{left:0;right:0}.auth-form{margin:auto}.toolbar{align-items:stretch;flex-direction:column}.searchbox{width:100%}}
 @media(max-width:430px){.metric-grid{grid-template-columns:1fr 1fr}.company-grid{grid-template-columns:1fr}.natasha-side{grid-template-columns:1fr}.top-avatar{display:none}.breadcrumb{font-size:10px}.bottom-note .note-tag{display:none}.hero-panel{min-height:230px}.hero-copy p{max-width:240px}.draft-card-foot{align-items:flex-start;flex-direction:column;gap:12px}}
+
+
+/* Varia AI Office */
+.office-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:0 0 16px}
+.office-metrics .metric-top{display:flex;align-items:center;justify-content:space-between}
+.office-policy{display:flex;align-items:center;gap:12px;padding:14px 17px;border:1px solid #46533a;background:#202a20;border-radius:12px;margin-bottom:16px;color:#c6d6bd}
+.office-policy>div{display:grid;gap:4px;flex:1}.office-policy strong{font-size:11px}.office-policy span{font-size:9px;color:#9eac9c;line-height:1.5}
+.policy-chip{font-size:8px!important;letter-spacing:1px;color:#d8bf83!important;border:1px solid #655536;border-radius:5px;padding:6px 8px;white-space:nowrap}
+.office-agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:16px}
+.office-agent{padding:18px;min-width:0}.office-agent-top{display:flex;align-items:center;justify-content:space-between}
+.office-agent-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:#263a2b;color:#b7d1b2}
+.agent-state{font-size:8px;letter-spacing:.8px;color:#d8bf83}.agent-state.active{color:#a6d2a7}
+.office-agent h3{font:700 14px Manrope,sans-serif;color:#e4ece3;margin:14px 0 3px}
+.office-role{font-size:9px;color:#d3bd82;letter-spacing:.4px}.office-agent p{font-size:10px;color:#8e9e91;line-height:1.65;min-height:50px}
+.office-scope{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0}.office-scope span{font-size:8px;color:#a9b8aa;background:#202e24;border:1px solid var(--line);padding:5px 7px;border-radius:5px;text-transform:capitalize}
+.office-columns{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;align-items:start}
+.office-task-panel form label{display:block;font-size:10px;color:#aab7aa;margin:0 0 7px}
+.office-task-panel input,.office-task-panel select,.office-task-panel textarea{width:100%;border:1px solid #35463a;background:#111a14;color:#e4ece3;border-radius:8px;padding:11px 12px;font-size:11px;outline:none;margin-bottom:14px}
+.office-task-panel textarea{resize:vertical;line-height:1.6}
+.office-footnote,.office-footer-note{display:flex;align-items:center;gap:8px;color:#87978a;font-size:9px;line-height:1.6}
+.office-footnote{border-top:1px solid var(--line);padding-top:13px;margin-top:15px}
+.office-footer-note{padding:13px 15px;border:1px solid var(--line);border-radius:10px;background:#151f18;margin:0 0 14px}
+.approval-card{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid var(--line)}
+.approval-card>div:first-child{display:grid;gap:5px;min-width:0}.approval-card strong{font-size:10px;color:#e0e8df}.approval-card p{font-size:9px;color:#9aa99c;margin:0;line-height:1.5}.approval-card small{font-size:8px;color:#77877b}
+.approval-type{font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:#d7bd7d}
+.approval-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}.approval-actions .secondary-btn{padding:8px 10px;font-size:9px}
+.draft-mini p{font-size:9px;color:#91a093;line-height:1.55;margin:0}
+.status-text.waiting_approval{color:#e2c37b}.status-text.queued{color:#9bb79e}.status-text.running{color:#8fc8a0}.status-text.failed{color:#df948a}
+@media(max-width:1050px){.office-agents{grid-template-columns:1fr 1fr}.office-metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.office-agents,.office-columns{grid-template-columns:1fr}.office-policy{align-items:flex-start}.policy-chip{display:none}.office-metrics{gap:8px}.office-agent p{min-height:0}}
