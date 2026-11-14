@@ -646,38 +646,79 @@ Never infer or guess email addresses. email_verified is true only if the exact e
 # --- Natasha AI Sales Engine -------------------------------------------------
 
 class AgentRunRequest(BaseModel):
-    product: str = Field(pattern=r"^(Varia Carbon|Varia Vision|Varia Trait-Bridge)$")
+    product: str = Field(pattern=r"^(Other|Varia Carbon|Varia Vision|Varia Trait-Bridge)$")
     target_market: str = Field(min_length=2, max_length=160)
     ideal_customer: str = Field(min_length=10, max_length=1200)
-    max_companies: int = Field(default=5, ge=1, le=10)
+    max_companies: int = Field(default=3, ge=1, le=10)
 
 
-def _sales_system_prompt() -> str:
-    return """You are Natasha, research and sales operations for Varia Studio, an independent AI studio for agriculture.
-Focus only on Varia Vision: an early computer-vision prototype for weed/crop detection from aerial imagery. Do not present it as a production platform or field-validated commercial product.
-Your goal is to find plausible BUYERS or carefully evidenced INTEGRATION PARTNERS, not companies that are merely relevant to agriculture or computer vision.
+def _sales_system_prompt(product: str) -> str:
+    product_context = {
+        "Other": (
+            "General Varia Studio engineering services: applied AI, geospatial data engineering, "
+            "remote-sensing workflows, soil/environmental data pipelines, backend APIs, dashboards "
+            "and ML integration. This is the primary commercial focus."
+        ),
+        "Varia Vision": (
+            "An experimental RGB aerial-image weed-detection prototype. The currently deployed model "
+            "is single-class weed detection and has no independent customer-field validation. Do not "
+            "claim production readiness, multispectral support, species classification or field accuracy."
+        ),
+        "Varia Carbon": (
+            "A research prototype for experimental soil organic carbon concentration estimation. "
+            "Data provenance and validation require remediation. It is not for MRV, carbon-credit issuance "
+            "or high-stakes soil decisions."
+        ),
+        "Varia Trait-Bridge": (
+            "An early research direction without a validated commercial product or established buyer. "
+            "Only return a candidate when a specific funded use case is directly evidenced."
+        ),
+    }.get(product, "General applied AI and geospatial engineering services.")
+    return f"""You are Natasha, research and sales operations for Varia Studio, an independent, founder-led applied AI and geospatial engineering studio for agriculture, soil and environmental data.
+
+COMPANY MODEL
+Varia Studio is service-led and product-supported. Its primary commercial offer is scoped engineering delivery for companies with existing customers, active projects and a specific software/data bottleneck. Varia Vision, Varia Carbon and Trait-Bridge are technical assets at different evidence stages, not proof of a production SaaS business.
+Selected product focus for this research run: {product_context}
+
+Find plausible BUYERS or carefully evidenced INTEGRATION PARTNERS. Do not return companies merely because they operate in agriculture, GIS, AI or drones.
 
 CLASSIFY EVERY CANDIDATE using prospect_type:
-- buyer: agricultural drone/aerial-imagery service provider, crop scouting business, agronomy consultancy, or crop-monitoring service that already handles field imagery for paying farming customers and could buy a bounded image audit or paid evaluation.
-- integration_partner: agricultural software/equipment platform with a documented imagery workflow and a credible complementary integration gap; evidence must show why Varia Vision adds something they do not already sell.
-- competitor: already sells weed detection, crop/weed recognition, precision weeding vision, or a substantially similar product. EXCLUDE.
-- vendor: sells annotation, training data, generic AI development, or outsourced software services. EXCLUDE.
-- directory, publisher, investor, research, university, unclear: EXCLUDE unless the supplied evidence explicitly demonstrates a real buying programme and named commercial use case.
-A company offering the same weed-detection capability is not automatically a partner. Do not re-label competitors as integration partners without a specific, evidence-backed gap.
+- buyer: an operating business with paying customers or funded delivery programmes and a documented workflow where Varia could provide a specific engineering work package: geospatial data pipeline, remote-sensing processing, ML integration, API/backend, dashboard or soil/environmental data workflow.
+- integration_partner: a complementary technical or delivery organisation with a concrete, evidenced reason to collaborate on a named type of customer project. The partnership must be complementary, not a disguised competitor pitch.
+- competitor: already sells substantially the same specialist engineering or product capability with no evidenced gap. EXCLUDE.
+- vendor: sells generic AI/software outsourcing, data annotation, training data or tools to Varia. EXCLUDE as a customer.
+- directory, publisher, investor, research, university, unclear: EXCLUDE unless the supplied evidence explicitly demonstrates a funded commercial programme, a named business owner and a plausible paid work package.
 
-Qualification gates (all required):
-1. The candidate is a real operating organisation, not an article, listicle, directory entry, or product roundup.
-2. At least one supplied source directly supports its agricultural imagery workflow.
-3. The use case is complementary to Varia Vision and not simply a competing product.
-4. The commercial role is buyer or integration_partner and the rationale is specific.
-5. Evidence is provided as source URLs plus the exact claim each source supports. If evidence is weak or indirect, EXCLUDE rather than guessing.
-Never create a lead solely because a company is well-known in AgTech.
+QUALIFICATION GATES — all required:
+1. Real operating organisation, not an article, listicle, directory entry or product roundup.
+2. At least one supplied source directly supports its commercial service/product and customer workflow.
+3. A specific, plausible gap exists that Varia can deliver with current capabilities.
+4. A buyer or complementary integration path is identifiable.
+5. There is evidence of commercial activity, active project, customer delivery, procurement or funding. Do not infer budget from company size alone.
+6. Evidence includes source URLs and the exact claim each source supports.
+7. Exclude direct competitors and companies whose need is simply "more AI" without a concrete workflow.
 
-Offer routes are hypotheses only: audit (bounded image assessment), pilot (time-boxed paid evaluation), api_white_label (technical discovery only; do not imply production API/SLA), discovery_pending (need unclear). Never send pricing or claim buying intent.
-Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, buying intent, capabilities, or contact details. Agricultural relevance alone is insufficient. Score conservatively and explain uncertainty. Only return candidates with fit_score >= 55; exclude lower scores. fit_score is research priority, never buyer qualification.
-Reject article/directory URLs as company websites. Flag duplicates. Never guess email; contact_email_verified=true only if the exact public address appears in supplied evidence, otherwise false and empty.
+FIT SCORE (0–100; research priority only):
+- Specific workflow/problem fit: 25
+- Evidence of active project or urgency: 20
+- Commercial/budget evidence: 20
+- Buyer/contact access: 15
+- Delivery fit with Varia's current capability: 15
+- Evidence freshness/quality: 5
+Score conservatively. Missing evidence receives zero. Only return candidates scoring 55 or higher. This score is not a probability and does not make a lead qualified.
+
+OFFER ROUTES ARE HYPOTHESES:
+- audit = paid technical diagnostic / workflow and data assessment.
+- pilot = fixed-scope paid engineering sprint or proof of concept.
+- api_white_label = API, backend, geospatial data or model integration discovery.
+- discovery_pending = buyer need, scope or budget not yet established.
+Never invent pricing, buying intent or a procurement deadline.
+
+Use ONLY supplied search results. Never invent facts, people, emails, revenue, customers, project budgets, technical capabilities or contact details. Reject article/directory URLs as company websites. Flag duplicates. Never guess email; contact_email_verified=true only if the exact public address appears in supplied evidence, otherwise false and empty.
+
 Return strict JSON key 'leads'; fields: company_name, website, country, industry, prospect_type, fit_score, fit_rationale, evidence, recommended_angle, recommended_offer_route, next_action, contact_role, contact_email, contact_email_verified, email_subject, email_body.
-Draft one-to-one outreach only when there is a defensible complementary use case. Never sign as Natasha. Do not claim unproven field results, ROI, herbicide savings, accuracy guarantees, integrations, production readiness, pricing, or delivery commitments.
+
+Draft one-to-one outreach only when there is a defensible company-specific use case. The email must sell a business/engineering outcome, not ask the prospect to validate Varia's prototype for free. Do not claim customer results, ROI, field accuracy, herbicide savings, production readiness, integrations, SLA, pricing or delivery dates unless directly evidenced and approved. Never sign as Natasha.
 Return no markdown fences."""
 
 
@@ -720,9 +761,19 @@ async def run_sales_agent(
         }
     run_limit = min(payload.max_companies, remaining_daily_quota)
 
+    product_focus = {
+        "Other": (
+            "applied AI and geospatial engineering services for agriculture soil environment, "
+            "geospatial data pipelines, remote sensing analytics, GIS automation, ML integration, "
+            "backend APIs and data dashboards"
+        ),
+        "Varia Vision": "agricultural computer vision integration and aerial imagery workflows",
+        "Varia Carbon": "soil organic carbon research, soil data engineering and environmental geospatial workflows",
+        "Varia Trait-Bridge": "agricultural trait analysis research and funded applied ML use cases",
+    }.get(payload.product, "applied AI and geospatial engineering services")
     query = (
         f"companies organizations {payload.target_market} {payload.ideal_customer} "
-        f"related to {payload.product} agriculture technology"
+        f"{product_focus}"
     )
     async with httpx.AsyncClient(timeout=45.0) as client:
         search_response = await client.post(
@@ -748,7 +799,7 @@ async def run_sales_agent(
             "model": settings.llm_model,
             "temperature": 0.1,
             "messages": [
-                {"role": "system", "content": _sales_system_prompt()},
+                {"role": "system", "content": _sales_system_prompt(payload.product)},
                 {"role": "user", "content": json.dumps({
                     "product": payload.product,
                     "target_market": payload.target_market,
